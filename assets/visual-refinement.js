@@ -3,20 +3,22 @@
  */
 let sceneReader = () => null;
 export const inspectScene = () => sceneReader();
+import {createPlanetAssetLibrary} from './planet-assets.js';
 export function createVisualRefinement(api) {
   const { React: R, jsx: j, useFrame, useThree, Canvas, Line, Vector3, Quaternion,
     TextureLoader, BufferGeometry, Float32BufferAttribute, SRGBColorSpace,
     DoubleSide, state, cameraState, agentMeshes, agents, assetPath, fallbackTextures, TicketForm } = api;
   const bodies = {
-    mercury: { file: '2k_mercury.jpg', position: [-2.35, 1.55, -.6], scale: .58, period: 1420, tilt: .02 },
-    forge: { file: '2k_venus_atmosphere.jpg', position: [-.38,-.95,.4], scale: .97, period: 1800, tilt: .05 },
-    recon: { file: '2k_mars.jpg', position: [-2.62,-.7,.1], scale: .76, period: 2100, tilt: .44 },
-    warden: { file: '2k_jupiter.jpg', position: [-1.35,.22,.85], scale: 1.52, period: 2500, tilt: .06 },
-    saturn: { file: '2k_saturn.jpg', position: [.85,1.2,.7], scale: 1.36, period: 3100, tilt: .46 },
-    uranus: { file: '2k_uranus.jpg', position: [0,2.4,-1.3], scale: .86, period: 3700, tilt: 1.7 },
-    neptune: { file: '2k_neptune.jpg', position: [2.24,2.38,-1.8], scale: .84, period: 4300, tilt: .49 }
+    mercury: { name:'mercury', ratio:1, file: '2k_mercury.jpg', position: [-2.35, 1.55, -.6], scale: .58, period: 1420, tilt: .034*Math.PI/180 },
+    forge: { name:'venus', ratio:1, file: '2k_venus_atmosphere.jpg', position: [-.38,-.95,.4], scale: .97, period: 1800, tilt: 177.36*Math.PI/180 },
+    recon: { name:'mars', ratio:3376.2/3396.2, file: '2k_mars.jpg', position: [-2.62,-.7,.1], scale: .76, period: 2100, tilt: 25.19*Math.PI/180 },
+    warden: { name:'jupiter', ratio:66854/71492, file: '2k_jupiter.jpg', position: [-1.35,.22,.85], scale: 1.52, period: 2500, tilt: 3.13*Math.PI/180 },
+    saturn: { name:'saturn', ratio:54364/60268, file: '2k_saturn.jpg', position: [.85,1.2,.7], scale: 1.36, period: 3100, tilt: 26.73*Math.PI/180 },
+    uranus: { name:'uranus', ratio:24973/25559, file: '2k_uranus.jpg', position: [0,2.4,-1.3], scale: .86, period: 3700, tilt: 97.77*Math.PI/180 },
+    neptune: { name:'neptune', ratio:24341/24764, file: '2k_neptune.jpg', position: [2.24,2.38,-1.8], scale: .84, period: 4300, tilt: 28.32*Math.PI/180 }
   };
   const sun = new Vector3(-.65, .42, .9).normalize();
+  const assets=createPlanetAssetLibrary(api);
   const sceneClock = { time: 0, orbit: 0 };
   const interaction = { labelHover: null, exploredAgent: null };
   const flight = { agent: null, amount: 0, from: 0, to: 0, start: 0, revision: 0, panelReady: false };
@@ -137,7 +139,7 @@ export function createVisualRefinement(api) {
     }
   }
   function Presentation({ root, onChange }) {
-    useFrame(() => updatePresentation(root.current, onChange));
+    useFrame(() => updatePresentation(root.current, onChange), -3);
     return null;
   }
   function Universe() {
@@ -153,8 +155,7 @@ export function createVisualRefinement(api) {
       sceneClock.time += Math.min(delta, .05);
       const t = sceneClock.time;
       sceneClock.orbit += Math.min(delta, .05) * (1 - flight.amount);
-      sun.set(-.65 + Math.sin(t * .065) * .07, .42 + Math.sin(t * .09) * .055,
-        .9 + Math.sin(t * .045) * .07).normalize();
+      // Fixed common solar direction; UI accents do not affect planetary light.
     });
     return null;
   }
@@ -196,16 +197,21 @@ export function createVisualRefinement(api) {
     }
   `;
   const planetFragment = `
+    uniform float uVisibility;
     uniform sampler2D uMap;
     uniform sampler2D uRingMap;
+    uniform sampler2D uNormalMap;
+    uniform bool uHasNormal;
+    uniform sampler2D uRoughMap;
+    uniform bool uHasRough;
     uniform vec3 uSun;
     uniform vec3 uSunLocal;
     uniform vec3 uAtmosphere;
     uniform float uRelief;
     uniform float uSheen;
     uniform float uHover;
-    uniform float uVisibility;
     uniform bool uHasRings;
+    uniform float uPolarRatio;
     varying vec2 vUv;
     varying vec3 vNormalWorld;
     varying vec3 vPositionWorld;
@@ -220,9 +226,13 @@ export function createVisualRefinement(api) {
       vec3 dx = dFdx(vPositionWorld), dy = dFdy(vPositionWorld);
       vec3 rx = cross(dy, normal), ry = cross(normal, dx);
       float determinant = dot(dx, rx);
-      float relief = luminance * uRelief;
-      vec3 gradient = sign(determinant) * (dFdx(relief) * rx + dFdy(relief) * ry);
-      normal = normalize(abs(determinant) * normal - gradient);
+      if(uHasNormal) {
+        vec2 tx=dFdx(vUv),ty=dFdy(vUv);
+        vec3 tangent=normalize(rx*tx.x+ry*ty.x);
+        vec3 bitangent=normalize(rx*tx.y+ry*ty.y);
+        vec3 baked=texture2D(uNormalMap,vUv).xyz*2.0-1.0;
+        normal=normalize(tangent*baked.x+bitangent*baked.y+normal*baked.z);
+      }
       float ndl = dot(normal, uSun);
       float daylight = max(ndl, 0.0) * smoothstep(-.025, .04, ndl);
       float shadow = 1.0;
@@ -230,117 +240,137 @@ export function createVisualRefinement(api) {
         float t = -vLocal.y / uSunLocal.y;
         vec3 hit = vLocal + uSunLocal * t;
         float radial = length(hit.xz);
-        if (t > 0.0 && radial > .62 && radial < 1.15) {
-          float alpha = texture2D(uRingMap, vec2((radial - .62) / .53, .5)).a;
+        if (t > 0.0 && radial > .555 && radial < 1.1345) {
+          float alpha = texture2D(uRingMap, vec2((radial - .555) / .5795, .5)).a;
+          // Significant gaps are geometry on the rings and explicit in their shadow.
+          if((radial>.9755&&radial<1.013)||(radial>1.1085&&radial<1.111)||(radial>1.132&&radial<1.133))alpha=0.0;
           shadow = 1.0 - alpha * .78;
         }
       }
-      vec3 color = albedo * (.115 + .035 * (normal.y * .5 + .5) + daylight * 1.05 * shadow + uHover * .20);
+      vec3 color = albedo * (.075 + .025 * (normal.y * .5 + .5) + daylight * 1.35 * shadow);
       vec3 view = normalize(cameraPosition - vPositionWorld);
-      float softReflection = pow(max(dot(normal, normalize(uSun + view)), 0.0), 24.0);
+      float roughness=uHasRough ? texture2D(uRoughMap,vUv).g : .96;
+      float softReflection = pow(max(dot(normal, normalize(uSun + view)), 0.0), mix(44.0,12.0,roughness));
       color += vec3(.92, .96, 1.0) * softReflection * uSheen * (1.0 + uHover * .7) * daylight * shadow;
-      color += albedo * daylight * shadow * uHover * .075;
+      color += albedo * daylight * shadow * uHover * .10;
       float edge = pow(1.0 - max(dot(normal, view), 0.0), 5.0);
       color += uAtmosphere * edge * smoothstep(-.05, .25, ndl);
       color += vec3(.035,.045,.05) * pow(edge,.6) * smoothstep(-.05,.25,ndl) * uHover;
+      if(uVisibility<.001)discard;
       gl_FragColor = vec4(color, uVisibility);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }
   `;
   const ringFragment = `
+    uniform float uVisibility;
     uniform sampler2D uMap;
     uniform vec3 uSun;
     uniform vec3 uPlanetCenter;
     uniform float uPlanetRadius;
-    uniform float uVisibility;
+    uniform float uPolarRatio;
+    uniform bool uFaint;
+    uniform vec3 uSunLocal;
     varying vec3 vNormalWorld;
     varying vec3 vPositionWorld;
     varying vec3 vLocal;
     void main() {
-      float radius = length(vLocal.xy);
-      float radial = clamp((radius - .62) / .53, 0.0, 1.0);
-      vec4 band = texture2D(uMap, vec2(radial, .5));
+      float radius = length(vLocal.xz);
+      float radial = clamp((radius - .555) / .5795, 0.0, 1.0);
+      vec4 band = uFaint ? vec4(.3,.34,.34,.18) : texture2D(uMap, vec2(radial, .5));
       float edge = smoothstep(0.0, .005, radial) * (1.0 - smoothstep(.995, 1.0, radial));
       float alpha = band.a * edge;
       if (alpha < .008) discard;
       // Ray-sphere intersection: Saturn casts its shadow onto the ring plane.
-      vec3 oc = vPositionWorld - uPlanetCenter;
-      float along = dot(oc, uSun);
-      float perpendicular = length(oc - uSun * along);
-      float shadow = along < 0.0 ? smoothstep(uPlanetRadius * .94, uPlanetRadius * 1.05, perpendicular) : 1.0;
+      vec3 oc = vLocal / vec3(.5,.5*uPolarRatio,.5);
+      vec3 ray = uSunLocal / vec3(.5,.5*uPolarRatio,.5);
+      float aa=dot(ray,ray), bb=dot(oc,ray), cc=dot(oc,oc)-1.0;
+      float discriminant=bb*bb-aa*cc;
+      float shadow=bb<0.0 ? 1.0-smoothstep(-.12,.12,discriminant) : 1.0;
       float incidence = abs(dot(normalize(vNormalWorld), uSun));
       vec3 tint = mix(vec3(.48, .43, .36), vec3(.86, .82, .73), radial);
       float density = dot(band.rgb, vec3(.2126, .7152, .0722));
       vec3 color = tint * (.55 + density * .72) * (.18 + incidence * 1.48 * shadow);
+      if(uVisibility<.001)discard;
       gl_FragColor = vec4(color, alpha * .91 * uVisibility);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }
   `;
-  function Planet({ id, mode = 'scene' }) {
-    const body = bodies[id];
-    const root = R.useRef();
-    const sphere = R.useRef();
-    const ring = R.useRef();
-    const spin = R.useRef(0);
-    const response = R.useRef(0);
-    const inclination = R.useRef();
-    const work = R.useMemo(() => ({ quaternion: new Quaternion(), scale: new Vector3(), localSun: sun.clone(), center: new Vector3() }), []);
-    const material = R.useMemo(() => ({
-      uMap: { value: textures.get(body.file) || fallbackTextures[id]() },
-      uRingMap: { value: textures.get('2k_saturn_ring_alpha.png') || fallbackTextures.saturn() },
-      uSun: { value: sun.clone() }, uSunLocal: { value: sun.clone() },
-      uAtmosphere: { value: new Vector3(...({ mercury: [0,0,0], recon: [.03,.012,.004], forge: [.03,.025,.014], warden: [.015,.017,.023], saturn: [.016,.017,.02], uranus: [.02,.043,.05], neptune: [.013,.023,.048] }[id])) },
-      uRelief: { value: id === 'mercury' ? .012 : id === 'recon' ? .008 : 0 },
-      uSheen: { value: id === 'mercury' || id === 'recon' ? .006 : .022 },
-      uHover: { value: 0 },
-      uVisibility: { value: 1 },
-      uHasRings: { value: id === 'saturn' }
-    }), [id]);
-    const ringUniforms = R.useMemo(() => ({
-      uMap: { value: textures.get('2k_saturn_ring_alpha.png') || fallbackTextures.saturn() },
-      uSun: { value: material.uSun.value }, uPlanetCenter: { value: new Vector3() }, uPlanetRadius: { value: .5 }, uVisibility: material.uVisibility
-    }), []);
-    R.useEffect(() => { loadTextures().then(() => {
-      if (textures.has(body.file)) material.uMap.value = textures.get(body.file);
-      if (textures.has('2k_saturn_ring_alpha.png')) {
-        material.uRingMap.value = textures.get('2k_saturn_ring_alpha.png');
-        ringUniforms.uMap.value = textures.get('2k_saturn_ring_alpha.png');
+  const atmosphereFragment = `
+    uniform float uVisibility; uniform vec3 uSun; uniform vec3 uAtmosphere;
+    varying vec3 vNormalWorld; varying vec3 vPositionWorld;
+    void main(){
+      vec3 normal=normalize(vNormalWorld), view=normalize(cameraPosition-vPositionWorld);
+      float facing=max(dot(normal,view),0.0);
+      float limb=pow(1.0-facing,4.0)*smoothstep(0.0,.07,facing);
+      float light=smoothstep(-.08,.35,dot(normal,uSun));
+      gl_FragColor=vec4(uAtmosphere*4.0,limb*light*.18*uVisibility);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+  function Planet({ id }) {
+    const body=bodies[id], root=R.useRef(), response=R.useRef(0), spin=R.useRef(0);
+    // Axial tilt is retained in the upright planetary reference frame. The
+    // constellation paths are schematic presentation paths, not an ecliptic map.
+    const orientation=R.useMemo(()=>new Quaternion().setFromAxisAngle(new Vector3(0,0,1),body.tilt),[id]);
+    const [model,setModel]=R.useState(null);
+    const work=R.useMemo(()=>({q:new Quaternion()}),[]);
+    const material=R.useMemo(()=>({
+      uMap:{value:textures.get(body.file)||fallbackTextures[id]()},
+      uNormalMap:{value:null},uHasNormal:{value:false},uRoughMap:{value:null},uHasRough:{value:false},
+      uRingMap:{value:textures.get('2k_saturn_ring_alpha.png')||fallbackTextures.saturn()},
+      uSun:{value:sun.clone()},uSunLocal:{value:sun.clone()},
+      uAtmosphere:{value:new Vector3(...({mercury:[0,0,0],recon:[.025,.012,.004],forge:[.035,.029,.019],warden:[.016,.019,.021],saturn:[.022,.021,.019],uranus:[.025,.048,.05],neptune:[.02,.04,.05]}[id]))},
+      uVisibility:{value:1},uRelief:{value:0},uSheen:{value:.012},uHover:{value:0},
+      uHasRings:{value:id==='saturn'},uPolarRatio:{value:body.ratio}
+    }),[id]);
+    const ringUniforms=R.useMemo(()=>({
+      uVisibility:material.uVisibility,uMap:material.uRingMap,uSun:material.uSun,uSunLocal:material.uSunLocal,
+      uPolarRatio:{value:body.ratio},uFaint:{value:id==='uranus'},
+      uPlanetCenter:{value:new Vector3()},uPlanetRadius:{value:.5}
+    }),[id]);
+    R.useEffect(()=>{
+      let cancelled=false;
+      assets.load(body.name).then(result=>{
+        if(cancelled)return;
+        const globe=result.meshes.find(m=>/_Globe|OpaqueCloudDeck/.test(m.name));
+        if(globe?.material.map)material.uMap.value=globe.material.map;
+        if(globe?.material.normal){material.uNormalMap.value=globe.material.normal;material.uHasNormal.value=true;}
+        if(globe?.material.roughness){material.uRoughMap.value=globe.material.roughness;material.uHasRough.value=true;}
+        const rings=result.meshes.find(m=>m.name.includes('_Ring_'));
+        if(id==='saturn'&&rings?.material.map)material.uRingMap.value=rings.material.map;
+        setModel(result);document.getElementById('command-stage')?.setAttribute('data-'+body.name+'-asset','loaded');
+      }).catch(err=>{
+        console.error('Planet asset failed',body.name,err);
+        document.getElementById('command-stage')?.setAttribute('data-'+body.name+'-asset','failed');
+      });
+      return()=>{cancelled=true;};
+    },[id]);
+    useFrame((_,delta)=>{
+      if(!root.current)return;
+      const data=state.getState(), target=data.hoverAgent===id?1:0;
+      response.current+=(target-response.current)*(data.motion==='reduced'?1:1-Math.exp(-Math.min(delta,.05)/.23));
+      material.uVisibility.value=flight.agent===id?1:1-flight.amount;
+      material.uHover.value=response.current; material.uSun.value.copy(sun);
+      if(data.motion==='full'&&presentation.kind!=='hidden'){
+        spin.current+=Math.min(delta,.05)*(id==='mercury'?.045:id==='forge'?.028:.065)*(1+response.current*2.4);
+        root.current.rotation.y=spin.current;
       }
-    }); }, [id]);
-    useFrame((_, delta) => {
-      if (!root.current) return;
-      const data = state.getState();
-      material.uVisibility.value = !constellationVisible() || flight.agent === id ? 1 : 1 - flight.amount;
-      const hoverTarget = data.hoverAgent === id ? 1 : 0;
-      response.current += (hoverTarget - response.current) * (data.motion === 'reduced' ? 1 : 1 - Math.exp(-Math.min(delta,.05) / (hoverTarget ? .18 : .38)));
-      material.uHover.value = response.current;
-      material.uSun.value.copy(sun);
-      material.uSun.value.y += response.current * .11;
-      material.uSun.value.z += response.current * .6;
-      material.uSun.value.normalize();
-      if (data.motion === 'full' && presentation.kind !== 'hidden') {
-        spin.current += Math.min(delta, .05) * (id === 'mercury' ? .14 : id === 'forge' ? .095 : .12) * (1 + response.current * 2.4);
-        root.current.rotation.y = spin.current;
-        if (inclination.current) inclination.current.rotation.z = body.tilt + .018 * (Math.sin(sceneClock.time * .12 + phaseFor(id)) - Math.sin(phaseFor(id)));
-      }
-      root.current.getWorldQuaternion(work.quaternion);
-      material.uSunLocal.value.copy(material.uSun.value).applyQuaternion(work.quaternion.invert());
-      root.current.getWorldPosition(ringUniforms.uPlanetCenter.value);
-      root.current.getWorldScale(work.scale);
-      ringUniforms.uPlanetRadius.value = .5 * work.scale.x;
+      root.current.getWorldQuaternion(work.q);
+      material.uSunLocal.value.copy(sun).applyQuaternion(work.q.invert());
     });
-    return j('group', { ref: inclination, rotation: [0, 0, body.tilt], children: j('group', { ref: root, children: [
-      j('mesh', { ref: sphere, children: [
-        j('sphereGeometry', { args: [.5, 96, 64] }),
-        j('shaderMaterial', { uniforms: material, vertexShader: vertex, fragmentShader: planetFragment, depthWrite: true, depthTest: true, transparent: true })
-      ] }),
-      id === 'saturn' ? j('mesh', { ref: ring, rotation: [-Math.PI / 2, 0, 0], children: [
-        j('ringGeometry', { args: [.62, 1.15, 256, 64] }),
-        j('shaderMaterial', { uniforms: ringUniforms, vertexShader: vertex, fragmentShader: ringFragment, side: DoubleSide, transparent: true, depthTest: true, depthWrite: false, toneMapped: true })
-      ] }) : null
-    ] }) });
+    return j('group',{quaternion:orientation,name:body.name+'_Obliquity',children:j('group',{ref:root,name:body.name+'_AxialRotation',children:
+      model?model.meshes.filter(m=>!m.name.includes('HiddenGround')).map(m=>j('mesh',{
+        name:m.name,geometry:m.geometry,renderOrder:m.name.includes('Atmospheric')?2:0,
+        children:j('shaderMaterial',{
+          uniforms:m.name.includes('_Ring_')?ringUniforms:material,vertexShader:vertex,
+          fragmentShader:m.name.includes('_Ring_')?ringFragment:m.name.includes('Atmospheric')?atmosphereFragment:planetFragment,
+          side:m.name.includes('_Ring_')?DoubleSide:undefined,
+          transparent:true,depthWrite:!/_Ring_|Atmospheric/.test(m.name),depthTest:true
+        })},m.name)):
+      j('mesh',{children:[j('sphereGeometry',{args:[.5,64,48]}),j('shaderMaterial',{uniforms:material,vertexShader:vertex,fragmentShader:planetFragment})]})
+    })});
   }
   function OrbitAgent({ id, children }) {
     const planet = R.useRef();
@@ -492,6 +522,118 @@ export function createVisualRefinement(api) {
       })
     ] });
   }
+  const diagnostics={assets:assets.metrics,frames:0,viewport:{},samples:[],errors:[]};
+  const qa={enabled:new URLSearchParams(location.search).has('qa'),calibration:false,running:false};
+  function Calibration() {
+    const sphere=R.useRef(); const {camera}=useThree();
+    useFrame(()=>{
+      if(!sphere.current)return;sphere.current.visible=qa.calibration;
+      sphere.current.position.copy(new Vector3(0,0,-2).applyQuaternion(camera.quaternion)).add(camera.position);
+    });
+    return j('mesh',{ref:sphere,name:'Spherical_Calibration',visible:false,renderOrder:10,children:[
+      j('sphereGeometry',{args:[.075,64,48]}),j('meshBasicMaterial',{color:'#ffffff',depthTest:false,depthWrite:false})
+    ]});
+  }
+  function QAOverlay() {
+    const [text,setText]=R.useState('Ready'),[running,setRunning]=R.useState(false);
+    R.useEffect(()=>{const timer=setInterval(()=>{if(!qa.running)setText(JSON.stringify(diagnostics.viewport,null,2));},1000);return()=>clearInterval(timer);},[]);
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    async function run(){
+      if(qa.running)return;qa.running=true;setRunning(true);diagnostics.samples=[];
+      const events=[]; const data=state.getState();
+      if(data.motion!=='full')data.toggleMotion();
+      const device=window.innerWidth<=768?'mobile':'desktop';
+      const canvas=document.querySelector('#command-stage canvas');
+      const stream=canvas.captureStream(24),chunks=[];
+      const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(type=>MediaRecorder.isTypeSupported(type));
+      const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:1800000});
+      recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};recorder.start(1000);
+      const scroll=y=>{if(window.__lenis)window.__lenis.scrollTo(y,{duration:.6});else window.scrollTo({top:y,behavior:'smooth'});};
+      const mark=label=>{events.push({label,at:performance.now(),viewport:{...diagnostics.viewport},motion:{...diagnostics.motion}});setText(label);};
+      const focus=document.getElementById('agent-focus');
+      const focusTop=()=>window.scrollY+focus.getBoundingClientRect().top;
+      try {
+        scroll(0);state.getState().setFocus(null);await wait(1600);qa.calibration=true;mark('Hero / spherical calibration');await wait(600);qa.calibration=false;
+        for(const agent of agents){
+          interaction.labelHover=agent.id;await wait(700);mark('Hover '+agent.codename);
+          interaction.exploredAgent=agent.id;interaction.exploreAt=performance.now();interaction.settled=false;
+          state.getState().setFocus(agent.id);await wait(2000);mark('Explore '+agent.codename);
+          interaction.labelHover=null;interaction.exploredAgent=null;state.getState().setFocus(null);await wait(1100);
+        }
+        const blocks=Array.from(focus.querySelectorAll('.focus-block'));
+        for(let i=0;i<agents.length;i++){
+          if(blocks.length)scroll(window.scrollY+blocks[i].getBoundingClientRect().top-80);
+          else scroll(focusTop()+Math.max(0,focus.offsetHeight-window.innerHeight)*(i+.2)/7);
+          await wait(1400);mark('Scroll focus '+agents[i].codename);qa.calibration=true;await wait(220);qa.calibration=false;
+        }
+        scroll(0);await wait(1600);
+        const watch=Array.from(document.querySelectorAll('button')).find(b=>b.textContent.includes('Watch the agents collaborate'));
+        watch?.click();mark('Watch the agents collaborate');await wait(23000);
+        const exit=Array.from(document.querySelectorAll('button')).find(b=>/exit tour/i.test(b.textContent));exit?.click();
+        const sequence=document.querySelector('[aria-label="Incident choreography"]');
+        scroll(window.scrollY+sequence.getBoundingClientRect().top+80);await wait(1500);
+        const play=Array.from(sequence.querySelectorAll('button')).find(b=>/play sequence/i.test(b.textContent));play?.click();mark('Play Sequence');
+        await wait(13000);
+        const phaseButtons=Array.from(sequence.querySelectorAll('button[aria-label^="Jump to phase"]'));
+        for(let i=0;i<6;i++){phaseButtons[i]?.click();await wait(1000);mark('Phase '+i);}
+        const request=Array.from(document.querySelectorAll('a')).find(a=>a.textContent.trim()==='REQUEST ACCESS');request?.click();await wait(600);mark('Request access drawer');
+        document.querySelector('.tri-access-close')?.click();
+      }catch(err){diagnostics.errors.push(String(err));mark('QA error '+err);}
+      const stopped=new Promise(resolve=>{recorder.onstop=resolve;});recorder.stop();await stopped;stream.getTracks().forEach(t=>t.stop());
+      const video=new Blob(chunks,{type:mime});
+      const report={device,viewport:[window.innerWidth,window.innerHeight],events,assets:assets.metrics,samples:diagnostics.samples,errors:diagnostics.errors,videoScope:'Actual canvas motion during automated UI journey; UI verified in separate screenshots',created:new Date().toISOString()};
+      try{
+        const headers={'X-QA-Device':device};
+        const result=await fetch('/__qa__/report',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(report)});
+        if(!result.ok)throw new Error('Local QA endpoint unavailable');
+        await fetch('/__qa__/video',{method:'POST',headers,body:video});
+        setText('Saved '+device+' recording and report');
+      }catch(err){
+        for(const [blob,name] of [[video,device+'.webm'],[new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),device+'.json']]){
+          const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+        }
+        setText('Downloaded '+device+' recording and report');
+      }
+      qa.running=false;setRunning(false);
+    }
+    R.useEffect(()=>{
+      if(!new URLSearchParams(location.search).has('autorun'))return;
+      const timer=setInterval(()=>{if(Object.keys(assets.metrics).length===7){clearInterval(timer);run();}},500);
+      return()=>clearInterval(timer);
+    },[]);
+    return j('details',{className:'tri-qa',children:[j('summary',{children:'Scene acceptance inspector'}),
+      j('button',{type:'button',onClick:run,disabled:running,children:running?'Recording acceptance journey…':'Run acceptance recording'}),
+      j('label',{children:[j('input',{type:'checkbox',onChange:e=>{qa.calibration=e.target.checked;}}),' Spherical calibration']}),
+      j('pre',{'data-testid':'scene-diagnostics',children:text})]});
+  }
+  function ViewportSync({root}) {
+    const {gl,camera}=useThree();
+    const previous=R.useRef('');
+    const sync=R.useCallback(()=>{
+      const node=root.current;
+      if(!node)return;
+      const bounds=node.getBoundingClientRect();
+      const width=Math.max(1,bounds.width),height=Math.max(1,bounds.height);
+      const dpr=Math.min(window.devicePixelRatio||1,presentation.mobile?1.25:1.5);
+      const key=`${width}:${height}:${dpr}`;
+      if(key!==previous.current || Math.abs(camera.aspect-width/height)>.00001 || Math.abs(gl.domElement.width-width*dpr)>1 || Math.abs(gl.domElement.height-height*dpr)>1){
+        gl.setPixelRatio(dpr);gl.setSize(width,height,false);
+        gl.domElement.style.width='100%';gl.domElement.style.height='100%';
+        camera.aspect=width/height;camera.updateProjectionMatrix();previous.current=key;
+      }
+      const canvas=gl.domElement.getBoundingClientRect();
+      const ratio=camera.projectionMatrix.elements[0]*canvas.width/(camera.projectionMatrix.elements[5]*canvas.height);
+      diagnostics.viewport={mode:presentation.kind,agent:presentation.agent,container:[bounds.width,bounds.height],css:[canvas.width,canvas.height],buffer:[gl.domElement.width,gl.domElement.height],dpr,cameraAspect:camera.aspect,calibrationRatio:ratio,parentTransform:getComputedStyle(node).transform};
+      node.dataset.calibrationRatio=ratio.toFixed(5);
+    },[gl,camera]);
+    R.useEffect(()=>{
+      const observer=new ResizeObserver(sync);if(root.current)observer.observe(root.current);
+      window.addEventListener('resize',sync);sync();
+      return()=>{observer.disconnect();window.removeEventListener('resize',sync);};
+    },[sync]);
+    useFrame(sync,-2);
+    return null;
+  }
   function Camera({ labels, root, cursor }) {
     const { camera, gl, raycaster, pointer, size } = useThree();
     const look = R.useRef(new Vector3(0, .65, -.4));
@@ -539,8 +681,7 @@ export function createVisualRefinement(api) {
       const smooth = data.motion === 'reduced' ? 1 : 1 - Math.exp(-Math.min(delta, .05) / (data.tourActive ? .72 : .58));
       const moduleFocus = presentation.kind === 'focus';
       const exploring = presentation.kind === 'hero' && !!focus && !data.tourActive && interaction.exploredAgent === focus;
-      const actualAspect = size.width / size.height;
-      if (Math.abs(camera.aspect - actualAspect) > .001) { camera.aspect = actualAspect; camera.updateProjectionMatrix(); }
+      const actualAspect = camera.aspect;
       if (object) {
         object.getWorldPosition(world);
         if (moduleFocus) {
@@ -558,7 +699,7 @@ export function createVisualRefinement(api) {
           const angularFit = Math.min(tangent * actualAspect * availableWidth / bounds.width, tangent * availableHeight / bounds.height) * .82;
           // A bounding sphere includes Saturn's complete tilted ring system.
           // Only camera distance changes; all model scales remain uniform.
-          const radius = bodies[focus].scale * (focus === 'saturn' ? 1.15 : .5);
+          const radius = bodies[focus].scale * (focus === 'saturn' ? 1.164 : focus === 'uranus' ? 1.0 : .504);
           const distance = radius / Math.sin(Math.atan(angularFit));
           const centerX = availableWidth * .5;
           const pan = (1 - 2 * centerX / bounds.width) * distance * tangent * actualAspect;
@@ -617,12 +758,17 @@ export function createVisualRefinement(api) {
       reveal.current = Math.min(1, reveal.current + Math.min(delta,.05) / .22);
       root.current?.style.setProperty('--tri-camera-opacity', String(reveal.current));
       camera.lookAt(look.current);
+      diagnostics.frames++;
+      diagnostics.motion={time:sceneClock.time,mode:data.motion,hover:data.hoverAgent,exploring:interaction.exploredAgent,tour:data.tourActive,phase:data.phase};
+      diagnostics.render={calls:gl.info.render.calls,triangles:gl.info.render.triangles,geometries:gl.info.memory.geometries,textures:gl.info.memory.textures,frameMs:delta*1000};
+      if(qa.running&&diagnostics.frames%6===0)diagnostics.samples.push({at:performance.now(),...diagnostics.viewport,...diagnostics.render,...diagnostics.motion,visibleAgents:agentMeshes.filter(m=>m.visible).map(m=>m.userData.agentId),scales:agentMeshes.map(m=>[m.userData.agentId,...m.scale.toArray()])});
+
       camera.updateMatrixWorld();
       if (exploring && object) {
         const stage = root.current.getBoundingClientRect();
         const panel = document.querySelector('.hero-rail').getBoundingClientRect();
         object.getWorldPosition(world);
-        const radius = bodies[focus].scale * (focus === 'saturn' ? 1.15 : .5);
+        const radius = bodies[focus].scale * (focus === 'saturn' ? 1.164 : focus === 'uranus' ? 1.0 : .504);
         let right = -Infinity;
         for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
           const point = new Vector3(x * radius, y * radius, z * radius).add(world).project(camera);
@@ -752,8 +898,8 @@ export function createVisualRefinement(api) {
       j('img', { className: 'tri-static-scene', src: assetPath('assets/scene-fallback.jpg'), alt: '', 'aria-hidden': true, style: { opacity: visible && !failed ? 0 : 1 } }),
       layout.agent ? j('div', { className: `tri-focus-fallback ${layout.agent === 'saturn' ? 'tri-fallback-saturn' : ''}`, 'aria-hidden': true, style: { visibility: visible && !failed ? 'hidden' : 'visible' }, children: j('div', { className: 'tri-fallback-sphere', style: { backgroundImage: `radial-gradient(circle at 28% 24%,transparent 24%,rgba(0,0,0,.78) 92%),url("${assetPath('assets/planets/' + bodies[layout.agent].file)}")` } }) }) : null,
       ready && !failed ? j(Canvas, { frameloop: hidden ? 'never' : 'always', dpr: [1, 1.5], camera: { fov: 38, near: .1, far: 45, position: [0, 2.2, 8.65] }, gl: { antialias: true, alpha: true, powerPreference: 'high-performance' }, style: { touchAction: 'pan-y' }, children: [
-        j(Presentation, { root, onChange: setLayout }), j(ExploreFlight, {}), j(Universe, {}), j(SpaceDust, {}), j(Stars, {}), j(OrbitalGuide, {}), ...agents.map(agent => j(OrbitAgent, { id: agent.id, children: j(Planet, { id: agent.id }) }, agent.id)),
-        j(Communications, {}), j(Camera, { labels, root, cursor }), j(Reveal, { onReady: () => setVisible(true) })
+        j(Presentation, { root, onChange: setLayout }), j(ViewportSync,{root}), j(ExploreFlight, {}), j(Universe, {}), j(SpaceDust, {}), j(Stars, {}), j(OrbitalGuide, {}), ...agents.map(agent => j(OrbitAgent, { id: agent.id, children: j(Planet, { id: agent.id }) }, agent.id)),
+        j(Communications, {}), j(Camera, { labels, root, cursor }), qa.enabled?j(Calibration,{}):null, j(Reveal, { onReady: () => setVisible(true) })
       ] }) : null,
       j('div', { ref: cursor, className: 'tri-cursor', 'aria-hidden': true, children: j('span', { className: 'tri-cursor-ring' }) }),
       j('div', { className: 'tri-planet-labels', style: { visibility: visible && !failed ? 'visible' : 'hidden' }, children: agents.map(agent => j('div', {
@@ -768,7 +914,7 @@ export function createVisualRefinement(api) {
             if (presentation.mobile) root.current.scrollIntoView({ behavior: state.getState().motion === 'reduced' ? 'instant' : 'smooth', block: 'center' });
           }, children: 'EXPLORE ↗' })]
       }, agent.id)) }),
-      j('div', { className: 'tri-scene-caption', 'aria-hidden': true, style: { visibility: visible && !failed ? 'visible' : 'hidden' }, children: [j('span', { children: 'SOL / 07 CORES' }), j('span', { children: 'MISSION CONTROL · LIVE' })] })
+      j('div', { className: 'tri-scene-caption', 'aria-hidden': true, style: { visibility: visible && !failed ? 'visible' : 'hidden' }, children: [j('span', { children: 'SOL / 07 CORES' }), j('span', { children: 'MISSION CONTROL · LIVE' })] }),qa.enabled?j(QAOverlay,{}):null
     ] });
   }
   function AccessDrawer() {

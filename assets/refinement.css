@@ -1,10 +1,13 @@
 :root{--instrument:#4edb9a;--instrument-dim:rgba(78,219,154,.23)}
+.tri-qa{position:fixed;left:12px;bottom:12px;z-index:80;max-width:350px;max-height:45dvh;overflow:auto;background:#071111f5;border:1px solid #658375;padding:10px;color:#c4d9ce;font:10px/1.5 monospace;pointer-events:auto}
+.tri-qa summary{cursor:pointer}.tri-qa button{display:block;border:1px solid #658375;padding:8px;margin:8px 0}.tri-qa pre{white-space:pre-wrap}.tri-qa label{display:block}
+.tri-qa{top:72px;bottom:auto;left:12px;max-height:300px;width:250px}
 /* Targeted design-taste audit: preserve routes, copy, monochrome type and mint
    instrument language. DESIGN_VARIANCE 5 / MOTION_INTENSITY 7 / VISUAL_DENSITY 5.
    Layers: scene 0, scene labels/controls 3–7, page content 10, existing dialogs above.
    Keep CTA, tour controls and the visual scene in independent reserved areas. */
 .tricore-stage{position:absolute;left:40%;right:1%;top:88px;height:min(620px,calc(100dvh - 235px));min-height:390px;z-index:0;overflow:hidden;background:radial-gradient(ellipse at 63% 35%,rgba(35,46,47,.19),transparent 67%);isolation:isolate}
-.tricore-stage canvas{outline:none;touch-action:pan-y!important;opacity:var(--tri-camera-opacity,1)}
+.tricore-stage canvas{display:block;width:100%!important;height:100%!important;transform:none!important;outline:none;touch-action:pan-y!important;opacity:var(--tri-camera-opacity,1)}
 [aria-label="Live incident — command center"]{pointer-events:none}
 [aria-label="Live incident — command center"] button,[aria-label="Live incident — command center"] [role=tab],[aria-label="Live incident — command center"] .panel{pointer-events:auto}
 .tri-cursor{position:absolute;left:0;top:0;z-index:7;opacity:0;pointer-events:none;transition:opacity .12s}
@@ -144,7 +147,7 @@
 .tricore-stage[data-scene-mode=sequence]{position:fixed;left:46%;right:2%;top:90px;height:calc(100dvh - 290px);min-height:320px}
 .tricore-stage[data-scene-mode=sequence] .tri-explore{display:none}
 @media(max-width:768px){
-  .tri-detail-scroll{padding:2px 6px 12px 0;max-height:none}
+  .tri-detail-scroll{padding:2px 6px 12px 0;max-height:min(65dvh,620px)}
   .tricore-stage[data-scene-mode=sequence]{position:absolute;left:0;right:0;height:300px;min-height:0}
   [aria-label="Incident choreography"] .choreo-block{padding-bottom:330px}
 }

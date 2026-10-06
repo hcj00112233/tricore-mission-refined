@@ -1,0 +1,78 @@
+{
+  "generator": "blender/generate_planets.py",
+  "blender": "5.2.2 LTS",
+  "models": [
+    {
+      "name": "Mercury",
+      "agent": "mercury",
+      "polar_equatorial_ratio": 1.0,
+      "axial_tilt_degrees": 0.034,
+      "glb": "mercury.glb",
+      "bytes": 1436328,
+      "vertices": 8066,
+      "triangles": 16128
+    },
+    {
+      "name": "Venus",
+      "agent": "forge",
+      "polar_equatorial_ratio": 1.0,
+      "axial_tilt_degrees": 177.36,
+      "glb": "venus.glb",
+      "bytes": 1417092,
+      "vertices": 24198,
+      "triangles": 48384
+    },
+    {
+      "name": "Mars",
+      "agent": "recon",
+      "polar_equatorial_ratio": 0.9941110653082857,
+      "axial_tilt_degrees": 25.19,
+      "glb": "mars.glb",
+      "bytes": 2189592,
+      "vertices": 16132,
+      "triangles": 32256
+    },
+    {
+      "name": "Jupiter",
+      "agent": "warden",
+      "polar_equatorial_ratio": 0.9351256084596878,
+      "axial_tilt_degrees": 3.13,
+      "glb": "jupiter.glb",
+      "bytes": 1479728,
+      "vertices": 16132,
+      "triangles": 32256
+    },
+    {
+      "name": "Saturn",
+      "agent": "saturn",
+      "polar_equatorial_ratio": 0.9020375655405853,
+      "axial_tilt_degrees": 26.73,
+      "glb": "saturn.glb",
+      "bytes": 1280116,
+      "vertices": 19730,
+      "triangles": 35840
+    },
+    {
+      "name": "Uranus",
+      "agent": "uranus",
+      "polar_equatorial_ratio": 0.9770726554247037,
+      "axial_tilt_degrees": 97.77,
+      "glb": "uranus.glb",
+      "bytes": 871696,
+      "vertices": 17674,
+      "triangles": 33792
+    },
+    {
+      "name": "Neptune",
+      "agent": "neptune",
+      "polar_equatorial_ratio": 0.9829187530285899,
+      "axial_tilt_degrees": 28.32,
+      "glb": "neptune.glb",
+      "bytes": 914528,
+      "vertices": 16132,
+      "triangles": 32256
+    }
+  ],
+  "units": "equatorial radius 0.5; display scales and orbits intentionally nonphysical",
+  "materials": "PBR export; web shaders reproduce solar shading, normal maps, atmospheric limb and mutual ring shadows"
+}
