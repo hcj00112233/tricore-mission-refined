@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Keep the published project routes and local preview on the same asset base.
+      if (location.hostname.endsWith('.github.io')) {
+        const base = document.createElement('base');
+        base.href = '/tricore-mission-refined/';
+        document.head.prepend(base);
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+    <meta name="description" content="TRICORE — Autonomous Security Operations. Seven planetary agents — MERCURY (signal orchestration), VENUS (remediation & coding), MARS (reconnaissance & pentest), JUPITER (containment & incident response), SATURN (policy & governance), URANUS (behavioral anomaly), NEPTUNE (threat intelligence & forensics) — working one shared incident graph in real time: detect, respond, repair." />
+    <meta property="og:title" content="TRICORE — Command Center" />
+    <meta property="og:description" content="Security that detects, responds, and repairs itself. Seven planets. One protocol — one shared incident graph." />
+    <meta property="og:image" content="./og-image.png" />
+    <meta name="theme-color" content="#06080C" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@1&display=swap"
+      rel="stylesheet"
+    />
+    <title>TRICORE — Command Center</title>
+    <script type="module" crossorigin src="./assets/index-BIIKTCwl.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BbcqEgfg.css">
+    <link rel="stylesheet" href="./assets/refinement.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <div class="tri-credits">Planet textures: <a href="https://www.solarsystemscope.com/textures/" rel="noopener noreferrer">Solar System Scope / INOVE</a> · <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener noreferrer">CC BY 4.0</a>. Rendering, lighting and composition adapted for TRICORE.</div>
+  </body>
+</html>

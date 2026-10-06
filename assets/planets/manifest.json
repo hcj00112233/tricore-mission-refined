@@ -1,0 +1,32 @@
+{
+  "collection": "Planet and Saturn ring textures staged for the TRICORE site",
+  "downloaded_at": "2026-10-06",
+  "provider": "Solar System Scope / INOVE",
+  "provider_textures_page": "https://www.solarsystemscope.com/textures/",
+  "license": {
+    "name": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "url": "https://creativecommons.org/licenses/by/4.0/",
+    "required_attribution": "Planet and space textures from Solar System Scope (https://www.solarsystemscope.com/textures/), licensed under CC BY 4.0.",
+    "modifications": "No pixel edits made; downloaded originals."
+  },
+  "assets": [
+    {"file":"2k_mercury.jpg","body":"Mercury","purpose":"equirectangular surface map","source_url":"https://www.solarsystemscope.com/textures/download/2k_mercury.jpg","dimensions_px":[2048,1024],"sha256":"5a5c80607f643496bac9a631e71957def35ed788895f18b678ac849c2b38e48a"},
+    {"file":"2k_venus_atmosphere.jpg","body":"Venus","purpose":"equirectangular cloud / atmosphere map","source_url":"https://www.solarsystemscope.com/textures/download/2k_venus_atmosphere.jpg","dimensions_px":[2048,1024],"sha256":"225012ad4911730605c4e189ca2a3bf674fce50cc48aab4102b936b47d6991ac"},
+    {"file":"2k_mars.jpg","body":"Mars","purpose":"equirectangular surface map","source_url":"https://www.solarsystemscope.com/textures/download/2k_mars.jpg","dimensions_px":[2048,1024],"sha256":"2d187f3e77a98eaa8cea5f4cc722f633c122ef170b9e94ace6b5fb6cbc3f8e01"},
+    {"file":"2k_jupiter.jpg","body":"Jupiter","purpose":"equirectangular cloud-top map","source_url":"https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg","dimensions_px":[2048,1024],"sha256":"b0f04d005350252636b0e3396fc592548cbd9e9126b269d32d5c6abd4b0e4f2b"},
+    {"file":"2k_saturn.jpg","body":"Saturn","purpose":"equirectangular cloud-top map","source_url":"https://www.solarsystemscope.com/textures/download/2k_saturn.jpg","dimensions_px":[2048,1024],"sha256":"54a900ca9bf7ab62e70f862852759abdf342e6d6436a95a2fe9ebdb6bcd3bbac"},
+    {"file":"2k_saturn_ring_alpha.png","body":"Saturn","purpose":"radial ring strip / alpha texture for annular ring geometry","source_url":"https://www.solarsystemscope.com/textures/download/2k_saturn_ring_alpha.png","dimensions_px":[2048,125],"sha256":"4b0644b2f3ef259fd0bfaedd9dc52f9e7d9738f65f50363e8c4dd19f650d7334","notes":"Narrow transparent strip, not a 2D photograph. Apply across the ring's radial coordinate and tint in material/shader."},
+    {"file":"2k_uranus.jpg","body":"Uranus","purpose":"equirectangular cloud-top map","source_url":"https://www.solarsystemscope.com/textures/download/2k_uranus.jpg","dimensions_px":[2048,1024],"sha256":"d15239d46f82d3ea13d2b260b5b29b2a382f42f2916dae0694d0387b1204a09d"},
+    {"file":"2k_neptune.jpg","body":"Neptune","purpose":"equirectangular cloud-top map","source_url":"https://www.solarsystemscope.com/textures/download/2k_neptune.jpg","dimensions_px":[2048,1024],"sha256":"cb42ea82709741d28b0af44d8b283cbc6dbd0c521a7f0e1e1e010ade00977df6"}
+  ],
+  "source_notes": [
+    "Solar System Scope describes its maps as real planetary maps in equirectangular projection, based on NASA elevation and imagery data; its page notes that unmapped portions are filled with fictional terrain and that colors are tuned/saturated.",
+    "The three NASA Photojournal URLs supplied by the user are reference imagery only and were not downloaded: https://science.nasa.gov/photojournal/jewel-of-the-solar-system/ ; https://science.nasa.gov/photojournal/a-full-sweep-of-saturns-rings/ ; https://science.nasa.gov/photojournal/looking-through-the-rings/ . These are Cassini views/mosaics, not equirectangular planet maps or a radial ring strip. NASA credits on those pages: NASA/JPL-Caltech/SSI/Cornell for PIA17474; NASA/JPL/Space Science Institute for PIA11142 and PIA07513."
+  ],
+  "limitations": [
+    "Planet maps are 2K (2048x1024), suitable for typical web planet rendering but not close-up zoom; Uranus and Neptune have softer, low-detail visual texture at this resolution.",
+    "The Venus asset is a cloud / atmosphere map, not a surface map.",
+    "Saturn's ring image is an alpha strip (2048x125) that needs annular UV mapping and material tinting.",
+    "Solar System Scope warns that unmapped areas use fictional terrain and colors are slightly more saturated than reference photographs."
+  ]
+}
