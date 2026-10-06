@@ -20,10 +20,13 @@
 .tri-explore:hover{background:#153428;border-color:#94e3c1}
 .tri-explore:focus-visible{outline:1px solid #b4eed7;outline-offset:3px}
 .tricore-stage::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 65px 20px #06080c;opacity:.58;z-index:2}
+.tricore-stage[data-touring=true]{height:min(620px,var(--tri-tour-scene-height,460px))}
+.tricore-stage[data-touring=true] .tri-scene-caption{visibility:hidden!important}
+.tri-planet-label{width:110px;background:none!important}
 .tri-static-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transition:opacity .3s;pointer-events:none}
 .tri-planet-labels{position:absolute;inset:0;pointer-events:none;z-index:3}
 .tri-planet-label{position:absolute;width:120px;text-align:left;color:#d6ddda;font-family:'IBM Plex Mono',monospace;line-height:1.45;padding:4px 6px;border-left:1px solid rgba(163,186,175,.36);text-shadow:0 1px 6px #06080c,0 0 12px #06080c;transition:opacity .2s,border-color .2s;background:transparent}
-.tri-planet-label:hover,.tri-planet-label[data-selected=true]{border-color:#4edb9a;background:rgba(10,27,22,.72)}
+.tri-planet-label:hover,.tri-planet-label[data-selected=true]{border-color:#4edb9a;background:transparent}
 .tri-planet-label:focus-visible{outline:1px solid #4edb9a;outline-offset:4px}
 .tri-planet-name{display:block;font-size:11px;letter-spacing:.12em;font-weight:500}
 .tri-planet-role{display:block;font-size:9px;letter-spacing:.045em;color:#8eaaa0;margin-top:2px;white-space:nowrap}
@@ -58,6 +61,7 @@
 @media(max-width:768px){
   .tricore-stage{position:absolute;left:0;right:0;top:var(--tri-mobile-scene-top,530px);height:350px;min-height:0;background:radial-gradient(ellipse,rgba(35,46,47,.12),transparent 70%)}
   .tricore-stage::after{box-shadow:inset 0 0 24px 8px #06080c}
+  .tricore-stage[data-touring=true]{height:350px}
   .tri-scene-caption{bottom:0;font-size:7px;left:6%;right:6%}
   .tri-planet-label{width:88px;padding:2px 4px}
   .tri-planet-name{font-size:9px}
@@ -81,7 +85,7 @@
 @keyframes tri-panel-open{from{opacity:0;transform:translate3d(14px,0,0) scaleX(.97)}to{opacity:1;transform:translate3d(0,0,0) scaleX(1)}}
 @keyframes tri-panel-scan{0%{opacity:0;transform:translateY(0)}20%{opacity:1}100%{opacity:0;transform:translateY(var(--tri-panel-height,350px))}}
 /* Tour controller: compact left-column card, always below both CTA buttons. */
-[code-path="src/components/home/HeroSection.tsx:580:11"]{top:var(--tri-tour-top,550px)!important;bottom:auto!important;left:var(--tri-tour-left,clamp(20px,4.5vw,72px))!important;right:auto!important;width:min(460px,42vw);padding:0!important;justify-content:flex-start!important}
+[code-path="src/components/home/HeroSection.tsx:580:11"]{top:var(--tri-tour-top,550px)!important;bottom:auto!important;left:var(--tri-tour-left,59%)!important;right:auto!important;width:min(580px,46vw);transform:translateX(-50%)!important;padding:0!important;justify-content:flex-start!important}
 [code-path="src/components/home/HeroSection.tsx:588:13"]{max-width:none!important;padding:16px!important}
 [code-path="src/components/home/HeroSection.tsx:590:17"]{font-size:9px!important;letter-spacing:.09em}
 [code-path="src/components/home/HeroSection.tsx:594:17"]{gap:4px!important}
@@ -90,7 +94,7 @@
 [code-path="src/components/home/HeroSection.tsx:609:15"]{margin-top:10px!important;padding-top:10px!important}
 [code-path="src/components/home/HeroSection.tsx:609:15"] button{min-height:32px!important;font-size:9px!important;padding:0 10px!important}
 @media(max-width:768px){
-  [code-path="src/components/home/HeroSection.tsx:580:11"]{left:20px!important;right:20px!important;width:auto}
+  [code-path="src/components/home/HeroSection.tsx:580:11"]{left:20px!important;right:20px!important;width:auto;transform:none!important}
   [code-path="src/components/home/HeroSection.tsx:609:15"] button{min-height:40px!important}
   .tri-explore{font-size:7px;margin-top:4px;padding:3px 5px}
   .hero-rail[data-detail-open=true]{display:block!important;position:fixed!important;top:auto!important;bottom:20px!important;left:20px!important;right:20px!important;width:auto!important;max-height:42dvh;overflow:auto;z-index:20}
@@ -114,7 +118,10 @@
 .panel{position:relative;border:0!important;border-radius:0!important;box-shadow:0 0 20px #32a7550a,inset 0 0 50px #1a47320d;background-color:#071111!important}
 .panel::before,.hero-rail .panel::before,.panel.reg-ticks::before{content:""!important;position:absolute!important;inset:0!important;width:auto!important;height:auto!important;border:0!important;background:url('./instrument-frame.svg') center/100% 100% no-repeat!important;opacity:1!important;pointer-events:none!important;z-index:5}
 .panel::after,.hero-rail .panel::after,.panel.reg-ticks::after{content:none!important;display:none!important}
-#agent-focus .panel{padding:28px!important}
+#agent-focus .panel{padding:24px!important;overflow:hidden!important;min-width:0}
+/* Scroll selection is immediate; waiting exit/enter fades left an empty rail. */
+#agent-focus .panel{opacity:1!important;transform:none!important}
+@media(min-width:769px){#agent-focus .panel{max-height:calc(100dvh - 178px)!important;overflow:hidden!important}}
 @media(min-width:769px){
   [code-path="src/components/home/AgentFocusSection.tsx:335:15"]{height:76dvh!important}
   [code-path="src/components/home/AgentFocusSection.tsx:340:15"]{grid-column:7/span 6!important}
@@ -125,3 +132,25 @@
   #agent-focus .focus-block>div:first-child>div{position:absolute;bottom:0;left:0;right:0}
   #agent-focus .panel{padding:24px!important}
 }
+
+/* Scroll only the content. A fixed padded frame cannot cross capabilities or logs. */
+.tri-detail-scroll{min-width:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:4px 8px 12px 2px;scroll-padding-block:14px;outline:none}
+.tri-detail-scroll:focus-visible{outline:1px solid #4edb9a80;outline-offset:4px}
+@media(min-width:769px){.tri-detail-scroll{max-height:calc(100dvh - 232px)}}
+#agent-focus .panel .tri-detail-scroll p,#agent-focus .panel .tri-detail-scroll li{white-space:normal;overflow-wrap:anywhere}
+#agent-focus .panel .tri-detail-scroll>div:first-child{gap:12px;flex-wrap:wrap}
+#agent-focus .panel .tri-detail-scroll>div:first-child>span:last-child{margin-left:auto;text-align:right;max-width:70%}
+#agent-focus .panel .tri-detail-scroll [code-path$=":116:15"]{overflow:visible}
+#agent-focus .panel .tri-detail-scroll .data-sm-text{line-height:1.65}
+#agent-focus [code-path="src/components/home/AgentFocusSection.tsx:340:15"]{min-width:0}
+/* Play Sequence retains the shared constellation beside the phase narrative. */
+.tricore-stage[data-scene-mode=sequence]{position:fixed;left:46%;right:2%;top:90px;height:calc(100dvh - 290px);min-height:320px}
+.tricore-stage[data-scene-mode=sequence] .tri-explore{display:none}
+@media(max-width:768px){
+  .tri-detail-scroll{padding:2px 6px 12px 0;max-height:none}
+  .tricore-stage[data-scene-mode=sequence]{position:absolute;left:0;right:0;height:300px;min-height:0}
+  [aria-label="Incident choreography"] .choreo-block{padding-bottom:330px}
+}
+
+#agent-focus .tri-detail-scroll .truncate{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+#agent-focus .tri-detail-scroll .flex{min-width:0}
