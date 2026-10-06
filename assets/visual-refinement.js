@@ -1,6 +1,8 @@
 /* TRICORE visual layer. Existing application state and event handlers are retained.
  * Planet maps: Solar System Scope / INOVE, CC BY 4.0. See planets/manifest.json.
  */
+let sceneReader = () => null;
+export const inspectScene = () => sceneReader();
 export function createVisualRefinement(api) {
   const { React: R, jsx: j, useFrame, useThree, Canvas, Line, Vector3, Quaternion,
     TextureLoader, BufferGeometry, Float32BufferAttribute, SRGBColorSpace,
@@ -15,8 +17,29 @@ export function createVisualRefinement(api) {
     neptune: { file: '2k_neptune.jpg', position: [2.24,2.38,-1.8], scale: .84, period: 4300, tilt: .49 }
   };
   const sun = new Vector3(-.65, .42, .9).normalize();
-  const sceneClock = { time: 0 };
+  const sceneClock = { time: 0, orbit: 0 };
   const interaction = { labelHover: null, exploredAgent: null };
+  const flight = { agent: null, amount: 0, from: 0, to: 0, start: 0, revision: 0, panelReady: false };
+  const easeFlight = value => value * value * value * (value * (value * 6 - 15) + 10);
+  const exploringAgent = () => {
+    const data = state.getState();
+    return presentation.kind === 'hero' && !data.tourActive && data.focusAgent === interaction.exploredAgent ? interaction.exploredAgent : null;
+  };
+  function ExploreFlight() {
+    useFrame(() => {
+      const selected = exploringAgent();
+      const to = selected ? 1 : 0;
+      if (to !== flight.to || selected && selected !== flight.agent) {
+        flight.from = flight.amount; flight.to = to; flight.start = performance.now(); flight.revision++;
+        flight.panelReady = false;
+        if (selected) flight.agent = selected;
+      }
+      const progress = state.getState().motion === 'reduced' ? 1 : Math.min(1, (performance.now() - flight.start) / 1800);
+      flight.amount = flight.from + (flight.to - flight.from) * easeFlight(progress);
+      if (!flight.amount && !selected) flight.agent = null;
+    });
+    return null;
+  }
   const phaseFor = id => Object.keys(bodies).indexOf(id) * .87;
   const orbitPhase = { mercury: 165, warden: 216, recon: 267, forge: 318, saturn: 9, neptune: 60, uranus: 111 };
   const choreography = { last: null, from: 'mercury', to: 'recon' };
@@ -64,15 +87,23 @@ export function createVisualRefinement(api) {
     // Keep the instrument opaque. A fading panel allowed the planets behind it
     // to show through while the fixed scene stayed on screen during scrolling.
     if (heroRail) {
-      if (kind !== 'hero' || data.tourActive || !data.focusAgent) interaction.exploredAgent = null;
+      if (kind !== 'hero' || data.tourActive || data.focusAgent !== interaction.exploredAgent) interaction.exploredAgent = null;
       const selectedName = agents.find(item => item.id === interaction.exploredAgent)?.codename;
       const loadedName = heroRail.querySelector('h2')?.textContent.trim();
       const open = kind === 'hero' && !data.tourActive && !!selectedName && loadedName === selectedName && data.focusAgent === interaction.exploredAgent;
+      const wasReady = !heroRail.inert;
       heroRail.dataset.detailOpen = String(open);
-      heroRail.style.setProperty('--tri-rail-opacity', open ? '1' : '0');
+      heroRail.style.setProperty('--tri-rail-opacity', open && flight.panelReady ? '1' : '0');
       heroRail.style.setProperty('--tri-panel-height', `${heroRail.offsetHeight}px`);
-      heroRail.style.visibility = open ? 'visible' : 'hidden';
-      heroRail.style.pointerEvents = open ? '' : 'none';
+      heroRail.style.visibility = open && flight.panelReady ? 'visible' : 'hidden';
+      heroRail.style.pointerEvents = open && flight.panelReady ? '' : 'none';
+      heroRail.inert = !open || !flight.panelReady;
+      if (open && flight.panelReady && !wasReady) heroRail.querySelector('button[aria-label="Return to overview"]')?.focus({ preventScroll: true });
+      if (open) {
+        const stageBounds = root.getBoundingClientRect();
+        heroRail.style.setProperty('--tri-detail-top', `${stageBounds.top - heroRail.offsetParent.getBoundingClientRect().top + 16}px`);
+        heroRail.style.setProperty('--tri-detail-height', `${stageBounds.height - 32}px`);
+      }
     }
     if (hero) {
       const tour = hero.querySelector('[code-path="src/components/home/HeroSection.tsx:580:11"]');
@@ -121,6 +152,7 @@ export function createVisualRefinement(api) {
       if (data.motion !== 'full' || presentation.kind === 'hidden') return;
       sceneClock.time += Math.min(delta, .05);
       const t = sceneClock.time;
+      sceneClock.orbit += Math.min(delta, .05) * (1 - flight.amount);
       sun.set(-.65 + Math.sin(t * .065) * .07, .42 + Math.sin(t * .09) * .055,
         .9 + Math.sin(t * .045) * .07).normalize();
     });
@@ -172,6 +204,7 @@ export function createVisualRefinement(api) {
     uniform float uRelief;
     uniform float uSheen;
     uniform float uHover;
+    uniform float uVisibility;
     uniform bool uHasRings;
     varying vec2 vUv;
     varying vec3 vNormalWorld;
@@ -210,7 +243,7 @@ export function createVisualRefinement(api) {
       float edge = pow(1.0 - max(dot(normal, view), 0.0), 5.0);
       color += uAtmosphere * edge * smoothstep(-.05, .25, ndl);
       color += vec3(.035,.045,.05) * pow(edge,.6) * smoothstep(-.05,.25,ndl) * uHover;
-      gl_FragColor = vec4(color, 1.0);
+      gl_FragColor = vec4(color, uVisibility);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }
@@ -220,6 +253,7 @@ export function createVisualRefinement(api) {
     uniform vec3 uSun;
     uniform vec3 uPlanetCenter;
     uniform float uPlanetRadius;
+    uniform float uVisibility;
     varying vec3 vNormalWorld;
     varying vec3 vPositionWorld;
     varying vec3 vLocal;
@@ -239,7 +273,7 @@ export function createVisualRefinement(api) {
       vec3 tint = mix(vec3(.48, .43, .36), vec3(.86, .82, .73), radial);
       float density = dot(band.rgb, vec3(.2126, .7152, .0722));
       vec3 color = tint * (.55 + density * .72) * (.18 + incidence * 1.48 * shadow);
-      gl_FragColor = vec4(color, alpha * .91);
+      gl_FragColor = vec4(color, alpha * .91 * uVisibility);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }
@@ -261,11 +295,12 @@ export function createVisualRefinement(api) {
       uRelief: { value: id === 'mercury' ? .012 : id === 'recon' ? .008 : 0 },
       uSheen: { value: id === 'mercury' || id === 'recon' ? .006 : .022 },
       uHover: { value: 0 },
+      uVisibility: { value: 1 },
       uHasRings: { value: id === 'saturn' }
     }), [id]);
     const ringUniforms = R.useMemo(() => ({
       uMap: { value: textures.get('2k_saturn_ring_alpha.png') || fallbackTextures.saturn() },
-      uSun: { value: material.uSun.value }, uPlanetCenter: { value: new Vector3() }, uPlanetRadius: { value: .5 }
+      uSun: { value: material.uSun.value }, uPlanetCenter: { value: new Vector3() }, uPlanetRadius: { value: .5 }, uVisibility: material.uVisibility
     }), []);
     R.useEffect(() => { loadTextures().then(() => {
       if (textures.has(body.file)) material.uMap.value = textures.get(body.file);
@@ -277,6 +312,7 @@ export function createVisualRefinement(api) {
     useFrame((_, delta) => {
       if (!root.current) return;
       const data = state.getState();
+      material.uVisibility.value = !constellationVisible() || flight.agent === id ? 1 : 1 - flight.amount;
       const hoverTarget = data.hoverAgent === id ? 1 : 0;
       response.current += (hoverTarget - response.current) * (data.motion === 'reduced' ? 1 : 1 - Math.exp(-Math.min(delta,.05) / (hoverTarget ? .18 : .38)));
       material.uHover.value = response.current;
@@ -298,7 +334,7 @@ export function createVisualRefinement(api) {
     return j('group', { ref: inclination, rotation: [0, 0, body.tilt], children: j('group', { ref: root, children: [
       j('mesh', { ref: sphere, children: [
         j('sphereGeometry', { args: [.5, 96, 64] }),
-        j('shaderMaterial', { uniforms: material, vertexShader: vertex, fragmentShader: planetFragment, depthWrite: true, depthTest: true, transparent: false })
+        j('shaderMaterial', { uniforms: material, vertexShader: vertex, fragmentShader: planetFragment, depthWrite: true, depthTest: true, transparent: true })
       ] }),
       id === 'saturn' ? j('mesh', { ref: ring, rotation: [-Math.PI / 2, 0, 0], children: [
         j('ringGeometry', { args: [.62, 1.15, 256, 64] }),
@@ -322,13 +358,13 @@ export function createVisualRefinement(api) {
       const data = state.getState();
       const hoverTarget = data.hoverAgent === id ? 1 : 0;
       response.current += (hoverTarget - response.current) * (data.motion === 'reduced' ? 1 : 1 - Math.exp(-Math.min(delta,.05) / (hoverTarget ? .18 : .38)));
-      planet.current.scale.setScalar(bodies[id].scale * (1 + response.current * (id === 'saturn' ? .045 : .065)));
-      positionAt(id, sceneClock.time * .028, planet.current.position);
+      planet.current.scale.setScalar(bodies[id].scale * (1 + response.current * (1 - flight.amount) * (id === 'saturn' ? .045 : .065)));
+      positionAt(id, sceneClock.orbit * .028, planet.current.position);
       const focus = presentation.kind === 'focus' || presentation.kind === 'sequence' ? presentation.agent : data.focusAgent;
-      planet.current.visible = constellationVisible() || presentation.kind === 'focus' && focus === id;
+      planet.current.visible = (constellationVisible() && (flight.amount < 1 || flight.agent === id)) || presentation.kind === 'focus' && focus === id;
       if (halo.current) {
         halo.current.visible = constellationVisible() && (data.hoverAgent === id || data.tourActive && focus === id || presentation.kind === 'sequence' && sequenceAgents[data.phase]?.includes(id));
-        halo.current.material.opacity = data.hoverAgent === id ? .7 : .45;
+        halo.current.material.opacity = (data.hoverAgent === id ? .7 : .45) * (1 - flight.amount);
       }
     });
     return j(R.Fragment, { children: [
@@ -341,7 +377,10 @@ export function createVisualRefinement(api) {
   function OrbitalGuide() {
     const group = R.useRef();
     const points = R.useMemo(() => Array.from({ length: 257 }, (_, i) => positionAt('mercury', i / 256 * Math.PI * 2)), []);
-    useFrame(() => { if (group.current) group.current.visible = constellationVisible(); });
+    useFrame(() => { if (group.current) {
+      group.current.visible = constellationVisible() && flight.amount < 1;
+      group.current.traverse(node => { if (node.material) { node.material.userData.baseOpacity ??= node.material.opacity; node.material.opacity = node.material.userData.baseOpacity * (1 - flight.amount); } });
+    } });
     return j('group', { ref: group, children: [
       j(Line, { points, lineWidth: 1, color: '#729c93', opacity: .28, transparent: true, depthWrite: false, toneMapped: false }),
       j('mesh', { position: center, children: [j('sphereGeometry', { args: [.045, 16, 12] }), j('meshBasicMaterial', { color: '#9de2c6', transparent: true, opacity: .7 })] }),
@@ -355,7 +394,7 @@ export function createVisualRefinement(api) {
     const initial = R.useMemo(() => Array.from({ length: 49 }, () => new Vector3()), []);
     useFrame(() => {
       const data = state.getState();
-      const visible = constellationVisible();
+      const visible = constellationVisible() && flight.amount < 1;
       if (line.current) line.current.visible = visible;
       if (!visible || !line.current) { particles.current.forEach(node => { if (node) node.visible = false; }); return; }
       const from = agentMeshes.find(mesh => mesh.userData.agentId === fromId);
@@ -366,7 +405,7 @@ export function createVisualRefinement(api) {
         : data.tourActive
         ? data.phase === 5 || choreography.from === fromId && choreography.to === toId
         : index === Math.min(6, Math.max(0, data.phase + 1));
-      if (line.current.material) line.current.material.opacity = active ? .6 : .16;
+      if (line.current.material) line.current.material.opacity = (active ? .6 : .16) * (1 - flight.amount);
       from.getWorldPosition(curve.a); to.getWorldPosition(curve.b);
       curve.direction.copy(curve.b).sub(curve.a).normalize();
       curve.a.addScaledVector(curve.direction, bodies[fromId].scale * .55);
@@ -381,7 +420,7 @@ export function createVisualRefinement(api) {
         node.visible = data.motion === 'full';
         const progress = (sceneClock.time * (active ? .38 : .13) + index * .17 + i * .055) % 1;
         node.position.copy(point(progress));
-        node.material.opacity = (active ? .9 : .32) * (1-i*.2) * Math.sin(progress*Math.PI);
+        node.material.opacity = (active ? .9 : .32) * (1-i*.2) * Math.sin(progress*Math.PI) * (1 - flight.amount);
       });
     });
     return j('group', { children: [
@@ -468,11 +507,13 @@ export function createVisualRefinement(api) {
     const world = R.useMemo(() => new Vector3(), []);
     const lastView = R.useRef('');
     const reveal = R.useRef(1);
+    const journey = R.useRef({ revision: -1, start: 0, position: new Vector3(), look: new Vector3() });
     R.useEffect(() => {
       const canvas = gl.domElement;
       const start = event => { down.current = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY }; };
       const move = event => {
         inside.current = event.pointerType !== 'touch';
+        if (exploringAgent()) return;
         const d = down.current;
         if (!d) return;
         drag.current.azimuth = Math.max(-.45, Math.min(.45, drag.current.azimuth - (event.clientX-d.x)*.002));
@@ -498,7 +539,7 @@ export function createVisualRefinement(api) {
       const smooth = data.motion === 'reduced' ? 1 : 1 - Math.exp(-Math.min(delta, .05) / (data.tourActive ? .72 : .58));
       const moduleFocus = presentation.kind === 'focus';
       const exploring = presentation.kind === 'hero' && !!focus && !data.tourActive && interaction.exploredAgent === focus;
-      const actualAspect = (root.current?.clientWidth || size.width) / (root.current?.clientHeight || size.height);
+      const actualAspect = size.width / size.height;
       if (Math.abs(camera.aspect - actualAspect) > .001) { camera.aspect = actualAspect; camera.updateProjectionMatrix(); }
       if (object) {
         object.getWorldPosition(world);
@@ -507,9 +548,22 @@ export function createVisualRefinement(api) {
           target.copy(world).add(new Vector3(0, distance * .08, distance));
           goalLook.copy(world);
         } else if (exploring) {
-          const distance = isMobile ? 8.6 : focus === 'saturn' ? 9.4 : 7.8;
-          target.copy(world).add(new Vector3(0, .65, distance));
-          goalLook.copy(world).add(new Vector3(isMobile ? 0 : 1.35, 0, 0));
+          const bounds = root.current.getBoundingClientRect();
+          const panel = document.querySelector('.hero-rail').getBoundingClientRect();
+          const gap = isMobile ? 10 : 24;
+          const panelLeft = panel.width ? panel.left - bounds.left : bounds.width - (isMobile ? bounds.width * .52 : 320);
+          const availableWidth = Math.max(80, Math.min(bounds.width, panelLeft) - gap);
+          const availableHeight = bounds.height - 48;
+          const tangent = Math.tan(camera.fov * Math.PI / 360);
+          const angularFit = Math.min(tangent * actualAspect * availableWidth / bounds.width, tangent * availableHeight / bounds.height) * .82;
+          // A bounding sphere includes Saturn's complete tilted ring system.
+          // Only camera distance changes; all model scales remain uniform.
+          const radius = bodies[focus].scale * (focus === 'saturn' ? 1.15 : .5);
+          const distance = radius / Math.sin(Math.atan(angularFit));
+          const centerX = availableWidth * .5;
+          const pan = (1 - 2 * centerX / bounds.width) * distance * tangent * actualAspect;
+          goalLook.copy(world).add(new Vector3(pan, 0, 0));
+          target.copy(goalLook).add(new Vector3(0, 0, distance));
         } else {
           // Dolly and pan through the shared system, rather than replacing
           // the scene with isolated planets at each tour step.
@@ -537,9 +591,12 @@ export function createVisualRefinement(api) {
       }
       const t = sceneClock.time;
       offset.copy(target).sub(goalLook)
-        .applyAxisAngle(yAxis, drag.current.azimuth + Math.sin(t * .09) * .018)
-        .applyAxisAngle(xAxis, drag.current.elevation + Math.sin(t * .07) * .009);
+        .applyAxisAngle(yAxis, (drag.current.azimuth + Math.sin(t * .09) * .018) * (1 - flight.amount))
+        .applyAxisAngle(xAxis, (drag.current.elevation + Math.sin(t * .07) * .009) * (1 - flight.amount));
       target.copy(goalLook).add(offset);
+      if (journey.current.revision !== flight.revision) {
+        journey.current = { revision: flight.revision, start: performance.now(), position: camera.position.clone(), look: look.current.clone() };
+      }
       const viewKey = presentation.kind;
       if (viewKey !== lastView.current) {
         // Scene and module have different viewports: never fly the camera
@@ -547,6 +604,11 @@ export function createVisualRefinement(api) {
         camera.position.copy(target); look.current.copy(goalLook);
         reveal.current = data.motion === 'reduced' ? 1 : 0;
         lastView.current = viewKey;
+      } else if (presentation.kind === 'hero' && (flight.to === 1 || flight.amount > 0)) {
+        const progress = data.motion === 'reduced' ? 1 : Math.min(1, (performance.now() - journey.current.start) / 1800);
+        const eased = easeFlight(progress);
+        camera.position.copy(journey.current.position).lerp(target, eased);
+        look.current.copy(journey.current.look).lerp(goalLook, eased);
       } else if (presentation.kind === 'focus') {
         camera.position.copy(target); look.current.copy(goalLook);
       } else {
@@ -555,6 +617,41 @@ export function createVisualRefinement(api) {
       reveal.current = Math.min(1, reveal.current + Math.min(delta,.05) / .22);
       root.current?.style.setProperty('--tri-camera-opacity', String(reveal.current));
       camera.lookAt(look.current);
+      camera.updateMatrixWorld();
+      if (exploring && object) {
+        const stage = root.current.getBoundingClientRect();
+        const panel = document.querySelector('.hero-rail').getBoundingClientRect();
+        object.getWorldPosition(world);
+        const radius = bodies[focus].scale * (focus === 'saturn' ? 1.15 : .5);
+        let right = -Infinity;
+        for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+          const point = new Vector3(x * radius, y * radius, z * radius).add(world).project(camera);
+          right = Math.max(right, (point.x + 1) * stage.width / 2);
+        }
+        // Reveal details only after the planet has cleared the panel's space.
+        flight.panelReady = flight.amount > .5 && right < panel.left - stage.left - 8;
+      }
+      root.current.dataset.focusProgress = flight.amount.toFixed(4);
+      root.current.dataset.exploredAgent = exploring ? focus : '';
+      sceneReader = () => ({
+        mode: presentation.kind, selected: exploring ? focus : null, isolation: flight.amount,
+        camera: camera.position.toArray(), aspect: camera.aspect, viewport: [size.width, size.height],
+        clock: sceneClock.time, orbit: sceneClock.orbit,
+        planets: agentMeshes.map(mesh => {
+          mesh.updateWorldMatrix(true, true);
+          const points = [];
+          mesh.traverse(node => {
+            if (!node.geometry || !node.material?.uniforms?.uVisibility) return;
+            const positions = node.geometry.attributes.position;
+            for (let i = 0; i < positions.count; i += 3) {
+              const point = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(node.matrixWorld).project(camera);
+              points.push([(point.x + 1) * size.width / 2, (1 - point.y) * size.height / 2]);
+            }
+          });
+          return { id: mesh.userData.agentId, visible: mesh.visible, scale: mesh.scale.toArray(),
+            bounds: [Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1])), Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))] };
+        })
+      });
       raycaster.setFromCamera(pointer, camera);
       const hits = inside.current ? raycaster.intersectObjects(agentMeshes.filter(mesh => mesh.visible), true) : [];
       let id = interaction.labelHover;
@@ -583,9 +680,11 @@ export function createVisualRefinement(api) {
         const mesh = agentMeshes.find(item => item.userData.agentId === agent.id);
         if (!element || !mesh) continue;
         mesh.getWorldPosition(world).project(camera);
-        const visible = constellationVisible() && Math.abs(world.x) < .96 && Math.abs(world.y) < .96 && (!exploring || focus === agent.id);
-        element.style.opacity = visible ? (data.tourActive && focus && focus !== agent.id ? '.65' : '1') : '0';
-        element.style.pointerEvents = visible ? 'auto' : 'none';
+        const visible = constellationVisible() && flight.amount < 1 && Math.abs(world.x) < .96 && Math.abs(world.y) < .96;
+        element.style.opacity = visible ? String((data.tourActive && focus && focus !== agent.id ? .65 : 1) * (1 - flight.amount)) : '0';
+        element.style.pointerEvents = visible && !exploring && !flight.amount ? 'auto' : 'none';
+        element.inert = exploring || flight.amount > 0 || !visible;
+        element.setAttribute('aria-hidden', String(exploring || flight.amount > 0 || !visible));
         const planet = projected.find(item => item.id === agent.id);
         const lw = isMobile ? 86 : 110, lh = id === agent.id ? 58 : 34, gap = isMobile ? 5 : 9;
         const sides = [
@@ -622,7 +721,6 @@ export function createVisualRefinement(api) {
     return null;
   }
   function Stage() {
-    const motion = state(data => data.motion);
     const [ready, setReady] = R.useState(false);
     const [visible, setVisible] = R.useState(false);
     const [failed, setFailed] = R.useState(false);
@@ -654,12 +752,9 @@ export function createVisualRefinement(api) {
       j('img', { className: 'tri-static-scene', src: assetPath('assets/scene-fallback.jpg'), alt: '', 'aria-hidden': true, style: { opacity: visible && !failed ? 0 : 1 } }),
       layout.agent ? j('div', { className: `tri-focus-fallback ${layout.agent === 'saturn' ? 'tri-fallback-saturn' : ''}`, 'aria-hidden': true, style: { visibility: visible && !failed ? 'hidden' : 'visible' }, children: j('div', { className: 'tri-fallback-sphere', style: { backgroundImage: `radial-gradient(circle at 28% 24%,transparent 24%,rgba(0,0,0,.78) 92%),url("${assetPath('assets/planets/' + bodies[layout.agent].file)}")` } }) }) : null,
       ready && !failed ? j(Canvas, { frameloop: hidden ? 'never' : 'always', dpr: [1, 1.5], camera: { fov: 38, near: .1, far: 45, position: [0, 2.2, 8.65] }, gl: { antialias: true, alpha: true, powerPreference: 'high-performance' }, style: { touchAction: 'pan-y' }, children: [
-        j(Presentation, { root, onChange: setLayout }), j(Universe, {}), j(SpaceDust, {}), j(Stars, {}), j(OrbitalGuide, {}), ...agents.map(agent => j(OrbitAgent, { id: agent.id, children: j(Planet, { id: agent.id }) }, agent.id)),
+        j(Presentation, { root, onChange: setLayout }), j(ExploreFlight, {}), j(Universe, {}), j(SpaceDust, {}), j(Stars, {}), j(OrbitalGuide, {}), ...agents.map(agent => j(OrbitAgent, { id: agent.id, children: j(Planet, { id: agent.id }) }, agent.id)),
         j(Communications, {}), j(Camera, { labels, root, cursor }), j(Reveal, { onReady: () => setVisible(true) })
       ] }) : null,
-      j('button', { className: 'tri-motion-control', type: 'button', onClick: () => state.getState().toggleMotion(),
-        'aria-label': motion === 'full' ? 'Pause scene motion' : 'Play scene motion', 'aria-pressed': motion === 'full',
-        children: motion === 'full' ? 'Ⅱ PAUSE MOTION' : '▶ PLAY MOTION' }),
       j('div', { ref: cursor, className: 'tri-cursor', 'aria-hidden': true, children: j('span', { className: 'tri-cursor-ring' }) }),
       j('div', { className: 'tri-planet-labels', style: { visibility: visible && !failed ? 'visible' : 'hidden' }, children: agents.map(agent => j('div', {
         ref: node => { labels.current[agent.id] = node; }, className: 'tri-planet-label', role: 'group', tabIndex: 0,
@@ -669,7 +764,8 @@ export function createVisualRefinement(api) {
         style: { opacity: 0, left: 0, top: 0 },
         children: [j('span', { className: 'tri-planet-name', children: agent.codename }), j('span', { className: 'tri-planet-role', children: labelNames[agent.id] }),
           j('button', { className: 'tri-explore', type: 'button', disabled: layout.kind !== 'hero', 'aria-label': `Explore ${agent.codename}`, onClick: event => {
-            event.stopPropagation(); if (presentation.kind !== 'hero') return; interaction.exploredAgent = agent.id; state.getState().setFocus(agent.id);
+            event.stopPropagation(); if (presentation.kind !== 'hero') return; interaction.exploredAgent = agent.id; interaction.labelHover = null; state.getState().setFocus(agent.id);
+            if (presentation.mobile) root.current.scrollIntoView({ behavior: state.getState().motion === 'reduced' ? 'instant' : 'smooth', block: 'center' });
           }, children: 'EXPLORE ↗' })]
       }, agent.id)) }),
       j('div', { className: 'tri-scene-caption', 'aria-hidden': true, style: { visibility: visible && !failed ? 'visible' : 'hidden' }, children: [j('span', { children: 'SOL / 07 CORES' }), j('span', { children: 'MISSION CONTROL · LIVE' })] })

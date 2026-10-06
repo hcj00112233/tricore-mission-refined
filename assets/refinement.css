@@ -7,9 +7,6 @@
 .tricore-stage canvas{outline:none;touch-action:pan-y!important;opacity:var(--tri-camera-opacity,1)}
 [aria-label="Live incident — command center"]{pointer-events:none}
 [aria-label="Live incident — command center"] button,[aria-label="Live incident — command center"] [role=tab],[aria-label="Live incident — command center"] .panel{pointer-events:auto}
-.tri-motion-control{position:absolute;right:16px;top:7px;z-index:6;font:9px/1.5 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8aa69b;padding:6px 8px;background:#080e12e8;border:1px solid #647f7040;cursor:pointer}
-.tri-motion-control:hover{color:#c5e2d4;border-color:#4edb9a80}
-.tri-motion-control:focus-visible{outline:1px solid #4edb9a;outline-offset:3px}
 .tri-cursor{position:absolute;left:0;top:0;z-index:7;opacity:0;pointer-events:none;transition:opacity .12s}
 .tri-cursor-ring{position:absolute;left:-18px;top:-18px;width:36px;height:36px;border:1px solid #9de4c8b3;border-radius:50%;box-shadow:0 0 14px #4edb9a20,inset 0 0 8px #4edb9a16}
 .tri-cursor-ring::before,.tri-cursor-ring::after{content:"";position:absolute;background:#c5efdf;left:15px;top:17px;width:5px;height:1px}
@@ -171,3 +168,18 @@
 @media(prefers-reduced-motion:no-preference){.tri-access-drawer[open]{animation:tri-drawer-in .28s cubic-bezier(.2,.7,.2,1)}}
 @keyframes tri-drawer-in{from{transform:translateX(100%);opacity:.6}to{transform:translateX(0);opacity:1}}
 @media(max-width:600px){.tri-access-header{padding:20px}.tri-access-content{padding:20px 16px 28px}.tri-access-content .panel{padding:16px!important}}
+
+/* Explore keeps the same canvas while reserving the right side for details. */
+.hero-rail[data-detail-open=true]{top:var(--tri-detail-top,112px)!important;bottom:auto!important;max-height:var(--tri-detail-height,480px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;transition:opacity .25s ease}
+.hero-rail[data-detail-open=true] .panel{min-height:100%;padding:20px!important}
+.tricore-stage[data-exploring=true] .tri-explore,.tricore-stage[data-exploring=true] .tri-scene-caption{display:none}
+@media(max-width:768px){
+  .hero-rail[data-detail-open=true]{position:absolute!important;left:auto!important;right:12px!important;width:52%!important;top:var(--tri-detail-top)!important;bottom:auto!important;max-height:var(--tri-detail-height,318px)}
+  .hero-rail[data-detail-open=true] .panel{padding:12px!important}
+  .hero-rail[data-detail-open=true] h2{font-size:18px}
+  .hero-rail[data-detail-open=true] .text-body{font-size:12px;line-height:1.5}
+  .hero-rail[data-detail-open=true] .label-text{font-size:8px;letter-spacing:.045em}
+  .hero-rail[data-detail-open=true] button[aria-label="Return to overview"]{min-height:36px;min-width:44px;flex-shrink:0}
+  .hero-rail[data-detail-open=true] [code-path="src/components/home/HeroSection.tsx:393:17"]{gap:6px;align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){.hero-rail[data-detail-open=true] .panel{animation:none!important}}
