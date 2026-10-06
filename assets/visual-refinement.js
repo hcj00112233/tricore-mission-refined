@@ -4,7 +4,7 @@
 export function createVisualRefinement(api) {
   const { React: R, jsx: j, useFrame, useThree, Canvas, Line, Vector3, Quaternion,
     TextureLoader, BufferGeometry, Float32BufferAttribute, SRGBColorSpace,
-    DoubleSide, state, cameraState, agentMeshes, agents, assetPath, fallbackTextures } = api;
+    DoubleSide, state, cameraState, agentMeshes, agents, assetPath, fallbackTextures, TicketForm } = api;
   const bodies = {
     mercury: { file: '2k_mercury.jpg', position: [-2.35, 1.55, -.6], scale: .58, period: 1420, tilt: .02 },
     forge: { file: '2k_venus_atmosphere.jpg', position: [-.38,-.95,.4], scale: .97, period: 1800, tilt: .05 },
@@ -675,5 +675,49 @@ export function createVisualRefinement(api) {
       j('div', { className: 'tri-scene-caption', 'aria-hidden': true, style: { visibility: visible && !failed ? 'visible' : 'hidden' }, children: [j('span', { children: 'SOL / 07 CORES' }), j('span', { children: 'MISSION CONTROL · LIVE' })] })
     ] });
   }
-  return { Planet, OrbitAgent, Stage, bodies };
+  function AccessDrawer() {
+    const [open, setOpen] = R.useState(false);
+    const dialog = R.useRef();
+    const opener = R.useRef();
+    R.useEffect(() => {
+      const request = event => {
+        const link = event.target.closest?.('a[href]');
+        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const url = new URL(link.href, location.href);
+        if (url.origin !== location.origin || !/\/access\/?$/.test(url.pathname)) return;
+        event.preventDefault(); event.stopPropagation();
+        opener.current = link;
+        setOpen(true);
+      };
+      document.addEventListener('click', request, true);
+      return () => document.removeEventListener('click', request, true);
+    }, []);
+    R.useEffect(() => {
+      const node = dialog.current;
+      if (!open || !node) return;
+      const overflow = document.body.style.overflow;
+      const lenis = window.__lenis;
+      lenis?.stop();
+      document.body.style.overflow = 'hidden';
+      node.showModal();
+      return () => {
+        node.close();
+        document.body.style.overflow = overflow;
+        lenis?.start();
+        opener.current?.focus({ preventScroll: true });
+      };
+    }, [open]);
+    return j('dialog', { ref: dialog, className: 'tri-access-drawer', 'aria-labelledby': 'tri-access-title',
+      onCancel: event => { event.preventDefault(); setOpen(false); },
+      onClick: event => { if (event.target === dialog.current) { const b = dialog.current.getBoundingClientRect(); if (event.clientX < b.left || event.clientX > b.right || event.clientY < b.top || event.clientY > b.bottom) setOpen(false); } },
+      children: open ? [
+        j('header', { className: 'tri-access-header', children: [
+          j('div', { children: [j('span', { className: 'label-text', children: 'DEPLOYMENT REQUEST' }), j('h2', { id: 'tri-access-title', children: 'Request access' })] }),
+          j('button', { type: 'button', className: 'tri-access-close', 'aria-label': 'Close deployment request', onClick: () => setOpen(false), children: 'ESC ×' })
+        ] }),
+        j('div', { className: 'tri-access-content', 'data-lenis-prevent': true, children: j(TicketForm, {}) })
+      ] : null
+    });
+  }
+  return { Planet, OrbitAgent, Stage, bodies, AccessDrawer };
 }

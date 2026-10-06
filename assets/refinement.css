@@ -154,3 +154,20 @@
 
 #agent-focus .tri-detail-scroll .truncate{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 #agent-focus .tri-detail-scroll .flex{min-width:0}
+
+/* Deployment requests use the existing form in a native modal side drawer. */
+.tri-access-drawer{position:fixed;inset:0 0 0 auto;width:min(560px,100vw);height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-left:1px solid #4edb9a55;color:#d6ddda;background:#071111;box-shadow:-24px 0 80px #0008;overflow:hidden}
+.tri-access-drawer::backdrop{background:#06080ca6;backdrop-filter:blur(4px)}
+.tri-access-drawer[open]{display:flex;flex-direction:column}
+.tri-access-header{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:24px 28px;border-bottom:1px solid #4edb9a26}
+.tri-access-header .label-text{font-size:9px;color:#8cafa1;letter-spacing:.16em}
+.tri-access-header h2{font-size:26px;line-height:1.25;letter-spacing:-.035em;margin-top:7px}
+.tri-access-close{font:10px/1.4 'IBM Plex Mono',monospace;letter-spacing:.1em;border:1px solid #4edb9a40;min-height:40px;padding:0 12px;color:#b9d2c7;background:#081916;cursor:pointer}
+.tri-access-close:hover,.tri-access-close:focus-visible{border-color:#4edb9a;outline:none;color:#e8fff5}
+.tri-access-content{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:24px 28px 32px;scrollbar-gutter:stable}
+.tri-access-content .panel{padding:24px!important}
+.tri-access-content .panel::before{display:none!important}
+.tri-access-content input,.tri-access-content textarea{max-width:100%}
+@media(prefers-reduced-motion:no-preference){.tri-access-drawer[open]{animation:tri-drawer-in .28s cubic-bezier(.2,.7,.2,1)}}
+@keyframes tri-drawer-in{from{transform:translateX(100%);opacity:.6}to{transform:translateX(0);opacity:1}}
+@media(max-width:600px){.tri-access-header{padding:20px}.tri-access-content{padding:20px 16px 28px}.tri-access-content .panel{padding:16px!important}}
