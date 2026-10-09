@@ -25,7 +25,7 @@ class SPAHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         qa_output = getattr(self.server, "qa_output", None)
-        if qa_output is None or self.path not in ("/__qa__/report", "/__qa__/video"):
+        if qa_output is None or self.path not in ("/__qa__/report", "/__qa__/video", "/__qa__/frame"):
             self.send_error(404)
             return
 
@@ -34,7 +34,12 @@ class SPAHandler(SimpleHTTPRequestHandler):
             self.send_error(400, "X-QA-Device must be desktop or mobile")
             return
 
-        limit = 5 * 1024 * 1024 if self.path == "/__qa__/report" else 100 * 1024 * 1024
+        limits = {
+            "/__qa__/report": 5 * 1024 * 1024,
+            "/__qa__/video": 100 * 1024 * 1024,
+            "/__qa__/frame": 12 * 1024 * 1024,
+        }
+        limit = limits[self.path]
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
@@ -58,10 +63,16 @@ class SPAHandler(SimpleHTTPRequestHandler):
                 self.send_error(400, "Report must contain valid JSON")
                 return
             suffix = ".json"
+        elif self.path == "/__qa__/frame":
+            if not body.startswith(b"\x89PNG\r\n\x1a\n"):
+                self.send_error(400, "Frame must be a PNG image")
+                return
+            suffix = ".png"
         else:
             suffix = ".webm"
 
-        target = qa_output / f"acceptance-{device}{suffix}"
+        stem = "acceptance-frame" if self.path == "/__qa__/frame" else "acceptance"
+        target = qa_output / f"{stem}-{device}{suffix}"
         target.write_bytes(body)
         response = json.dumps({"saved": target.name, "bytes": len(body)}).encode()
         self.send_response(201)

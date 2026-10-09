@@ -7,7 +7,7 @@
    Layers: scene 0, scene labels/controls 3–7, page content 10, existing dialogs above.
    Keep CTA, tour controls and the visual scene in independent reserved areas. */
 .tricore-stage{position:absolute;left:40%;right:1%;top:88px;height:min(620px,calc(100dvh - 235px));min-height:390px;z-index:0;overflow:hidden;background:radial-gradient(ellipse at 63% 35%,rgba(35,46,47,.19),transparent 67%);isolation:isolate}
-.tricore-stage canvas{display:block;width:100%!important;height:100%!important;transform:none!important;outline:none;touch-action:pan-y!important;opacity:var(--tri-camera-opacity,1)}
+.tricore-stage canvas{display:block;width:100%!important;height:100%!important;transform:none!important;outline:none;touch-action:pan-y!important;opacity:calc(var(--tri-ready,0)*var(--tri-camera-opacity,1));transition:opacity .65s ease}
 [aria-label="Live incident — command center"]{pointer-events:none}
 [aria-label="Live incident — command center"] button,[aria-label="Live incident — command center"] [role=tab],[aria-label="Live incident — command center"] .panel{pointer-events:auto}
 .tri-cursor{position:absolute;left:0;top:0;z-index:7;opacity:0;pointer-events:none;transition:opacity .12s}
@@ -23,8 +23,9 @@
 .tricore-stage[data-touring=true]{height:min(620px,var(--tri-tour-scene-height,460px))}
 .tricore-stage[data-touring=true] .tri-scene-caption{visibility:hidden!important}
 .tri-planet-label{width:110px;background:none!important}
-.tri-static-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transition:opacity .3s;pointer-events:none}
-.tri-planet-labels{position:absolute;inset:0;pointer-events:none;z-index:3}
+.tri-static-scene{position:absolute;inset:0;width:100%;height:100%;transition:opacity .65s ease;pointer-events:none}
+.tri-static-scene img{width:100%;height:100%;object-fit:contain}
+.tri-planet-labels{position:absolute;inset:0;pointer-events:none;z-index:3;opacity:var(--tri-ready,0);transition:opacity .65s ease}
 .tri-planet-label{position:absolute;width:120px;text-align:left;color:#d6ddda;font-family:'IBM Plex Mono',monospace;line-height:1.45;padding:4px 6px;border-left:1px solid rgba(163,186,175,.36);text-shadow:0 1px 6px #06080c,0 0 12px #06080c;transition:opacity .2s,border-color .2s;background:transparent}
 .tri-planet-label:hover,.tri-planet-label[data-selected=true]{border-color:#4edb9a;background:transparent}
 .tri-planet-label:focus-visible{outline:1px solid #4edb9a;outline-offset:4px}
@@ -101,7 +102,7 @@
 }
 @media(hover:none){.tri-explore{opacity:1;visibility:visible;transform:none}.tri-cursor{display:none}}
 @media(prefers-reduced-motion:reduce){.tri-explore,.tri-cursor{transition:none}}
-@media(prefers-reduced-motion:reduce){.tri-static-scene,.tri-planet-label{transition:none}.animate-scroll-cue{animation:none!important}}
+@media(prefers-reduced-motion:reduce){.tri-static-scene,.tri-planet-label,.tri-planet-labels,.tricore-stage canvas{transition:none}.animate-scroll-cue{animation:none!important}}
 
 /* One scene moves into the module's empty left column; no second scene is mounted. */
 .tricore-stage[data-scene-mode=focus]{position:fixed;left:4%;right:56%;top:112px;height:calc(100dvh - 235px);min-height:300px;background:none}

@@ -9,17 +9,18 @@ export function createVisualRefinement(api) {
     TextureLoader, BufferGeometry, Float32BufferAttribute, SRGBColorSpace,
     DoubleSide, state, cameraState, agentMeshes, agents, assetPath, fallbackTextures, TicketForm } = api;
   const bodies = {
-    mercury: { name:'mercury', ratio:1, file: '2k_mercury.jpg', position: [-2.35, 1.55, -.6], scale: .58, period: 1420, tilt: .034*Math.PI/180 },
-    forge: { name:'venus', ratio:1, file: '2k_venus_atmosphere.jpg', position: [-.38,-.95,.4], scale: .97, period: 1800, tilt: 177.36*Math.PI/180 },
-    recon: { name:'mars', ratio:3376.2/3396.2, file: '2k_mars.jpg', position: [-2.62,-.7,.1], scale: .76, period: 2100, tilt: 25.19*Math.PI/180 },
-    warden: { name:'jupiter', ratio:66854/71492, file: '2k_jupiter.jpg', position: [-1.35,.22,.85], scale: 1.52, period: 2500, tilt: 3.13*Math.PI/180 },
-    saturn: { name:'saturn', ratio:54364/60268, file: '2k_saturn.jpg', position: [.85,1.2,.7], scale: 1.36, period: 3100, tilt: 26.73*Math.PI/180 },
-    uranus: { name:'uranus', ratio:24973/25559, file: '2k_uranus.jpg', position: [0,2.4,-1.3], scale: .86, period: 3700, tilt: 97.77*Math.PI/180 },
-    neptune: { name:'neptune', ratio:24341/24764, file: '2k_neptune.jpg', position: [2.24,2.38,-1.8], scale: .84, period: 4300, tilt: 28.32*Math.PI/180 }
+    mercury: { name:'mercury', ratio:1, file:'2k_mercury.jpg', scale:.68, orbit:3.1, phase:155, spin:.015, tilt:.034*Math.PI/180 },
+    forge: { name:'venus', ratio:1, file:'2k_venus_atmosphere.jpg', scale:1.16, orbit:3.35, phase:276, spin:.009, tilt:177.36*Math.PI/180 },
+    recon: { name:'mars', ratio:3376.2/3396.2, file:'2k_mars.jpg', scale:.84, orbit:4.12, phase:227, spin:.045, tilt:25.19*Math.PI/180 },
+    warden: { name:'jupiter', ratio:66854/71492, file:'2k_jupiter.jpg', scale:2.08, orbit:2.15, phase:211, spin:.085, tilt:3.13*Math.PI/180 },
+    saturn: { name:'saturn', ratio:54364/60268, file:'2k_saturn.jpg', scale:1.78, orbit:2.65, phase:18, spin:.078, tilt:26.73*Math.PI/180 },
+    uranus: { name:'uranus', ratio:24973/25559, file:'2k_uranus.jpg', scale:1.04, orbit:3.55, phase:98, spin:.058, tilt:97.77*Math.PI/180 },
+    neptune: { name:'neptune', ratio:24341/24764, file:'2k_neptune.jpg', scale:1.02, orbit:4.38, phase:58, spin:.06, tilt:28.32*Math.PI/180 }
   };
   const sun = new Vector3(-.65, .42, .9).normalize();
   const assets=createPlanetAssetLibrary(api);
-  const sceneClock = { time: 0, orbit: 0 };
+  const sceneClock = { time: 0, orbit: 0, started:false };
+  const captureInitial = new URLSearchParams(location.search).has('capture');
   const interaction = { labelHover: null, exploredAgent: null };
   const flight = { agent: null, amount: 0, from: 0, to: 0, start: 0, revision: 0, panelReady: false };
   const easeFlight = value => value * value * value * (value * (value * 6 - 15) + 10);
@@ -43,7 +44,6 @@ export function createVisualRefinement(api) {
     return null;
   }
   const phaseFor = id => Object.keys(bodies).indexOf(id) * .87;
-  const orbitPhase = { mercury: 165, warden: 216, recon: 267, forge: 318, saturn: 9, neptune: 60, uranus: 111 };
   const choreography = { last: null, from: 'mercury', to: 'recon' };
   const presentation = { kind: 'hero', agent: null, mobile: false };
   const sequenceAgents = [['recon','mercury'],['uranus','recon','mercury'],['neptune','uranus','mercury'],['warden','saturn','mercury'],['forge','saturn','mercury'],['saturn',...Object.keys(bodies).filter(id=>id!=='saturn')]];
@@ -151,7 +151,7 @@ export function createVisualRefinement(api) {
         if (choreography.from === choreography.to) choreography.to = 'recon';
         choreography.last = data.focusAgent;
       } else if (!data.tourActive) choreography.last = null;
-      if (data.motion !== 'full' || presentation.kind === 'hidden') return;
+      if (!assetsReady || !sceneClock.started || captureInitial || data.motion !== 'full' || presentation.kind === 'hidden') return;
       sceneClock.time += Math.min(delta, .05);
       const t = sceneClock.time;
       sceneClock.orbit += Math.min(delta, .05) * (1 - flight.amount);
@@ -160,15 +160,18 @@ export function createVisualRefinement(api) {
     return null;
   }
   const center = new Vector3(0, .35, -.85);
-  // Shared, gently tilted orbit. Fixed phase spacing keeps the constellation
-  // connected and avoids planet intersections through a complete revolution.
+  // Approved display design: nested ellipses, one center and a shared angular
+  // rate. Phase separation preserves silhouettes through a full revolution.
+  // These are accelerated presentation orbits, not astronomical distances.
   const positionAt = (id, angle, out = new Vector3()) => {
-    const a = angle + (orbitPhase[id] || 0) * Math.PI / 180;
-    return out.set(center.x + Math.cos(a) * 2.9, center.y + Math.sin(a) * 2.22,
-      center.z + Math.sin(a) * .58 + Math.cos(a) * .16);
+    const body = bodies[id], a = angle + body.phase * Math.PI / 180;
+    return out.set(center.x + Math.cos(a) * body.orbit,
+      center.y + Math.sin(a) * body.orbit * .72,
+      center.z + Math.sin(a) * body.orbit * .10 + Math.cos(a) * body.orbit * .035);
   };
+  for (const [id, body] of Object.entries(bodies)) body.position = positionAt(id, 0).toArray();
   const textures = new Map();
-  let loading;
+  let loading, assetsReady = false;
   function loadTextures() {
     if (!loading) {
       const loader = new TextureLoader();
@@ -178,7 +181,9 @@ export function createVisualRefinement(api) {
           texture.anisotropy = 4;
           textures.set(file, texture);
           resolve();
-        }, undefined, () => resolve()))));
+        }, undefined, () => resolve())))).then(() =>
+          Promise.all(Object.values(bodies).map(body => assets.load(body.name)))
+        ).then(() => { assetsReady = true; });
     }
     return loading;
   }
@@ -210,6 +215,7 @@ export function createVisualRefinement(api) {
     uniform float uRelief;
     uniform float uSheen;
     uniform float uHover;
+    uniform bool uCloudWorld;
     uniform bool uHasRings;
     uniform float uPolarRatio;
     varying vec2 vUv;
@@ -222,6 +228,13 @@ export function createVisualRefinement(api) {
       // Linear-light calibration, before the restrained photographic finish.
       float luminance = dot(albedo, vec3(.2126, .7152, .0722));
       albedo = mix(vec3(luminance), albedo, .9);
+      // Broad, low-contrast visible-light cloud structure. No relief, exposed
+      // terrain, transmission, environment map or enhanced IR/UV banding.
+      if (uCloudWorld) {
+        float clouds = sin(vUv.y*19.0 + sin(vUv.x*18.85)*.55)*.45
+          + sin(vUv.y*37.0 + cos(vUv.x*12.57)*.32)*.2;
+        albedo *= 1.0 + clouds * .028;
+      }
       // Restrained texture-derived surface relief on the two rocky worlds.
       vec3 dx = dFdx(vPositionWorld), dy = dFdy(vPositionWorld);
       vec3 rx = cross(dy, normal), ry = cross(normal, dx);
@@ -251,7 +264,7 @@ export function createVisualRefinement(api) {
       vec3 view = normalize(cameraPosition - vPositionWorld);
       float roughness=uHasRough ? texture2D(uRoughMap,vUv).g : .96;
       float softReflection = pow(max(dot(normal, normalize(uSun + view)), 0.0), mix(44.0,12.0,roughness));
-      color += vec3(.92, .96, 1.0) * softReflection * uSheen * (1.0 + uHover * .7) * daylight * shadow;
+      color += vec3(.92, .96, 1.0) * softReflection * uSheen * daylight * shadow;
       color += albedo * daylight * shadow * uHover * .10;
       float edge = pow(1.0 - max(dot(normal, view), 0.0), 5.0);
       color += uAtmosphere * edge * smoothstep(-.05, .25, ndl);
@@ -313,7 +326,7 @@ export function createVisualRefinement(api) {
     const body=bodies[id], root=R.useRef(), response=R.useRef(0), spin=R.useRef(0);
     // Axial tilt is retained in the upright planetary reference frame. The
     // constellation paths are schematic presentation paths, not an ecliptic map.
-    const orientation=R.useMemo(()=>new Quaternion().setFromAxisAngle(new Vector3(0,0,1),body.tilt),[id]);
+    const orientation=R.useMemo(()=>new Quaternion().setFromAxisAngle(new Vector3(.82,0,.57).normalize(),body.tilt),[id]);
     const [model,setModel]=R.useState(null);
     const work=R.useMemo(()=>({q:new Quaternion()}),[]);
     const material=R.useMemo(()=>({
@@ -322,7 +335,8 @@ export function createVisualRefinement(api) {
       uRingMap:{value:textures.get('2k_saturn_ring_alpha.png')||fallbackTextures.saturn()},
       uSun:{value:sun.clone()},uSunLocal:{value:sun.clone()},
       uAtmosphere:{value:new Vector3(...({mercury:[0,0,0],recon:[.025,.012,.004],forge:[.035,.029,.019],warden:[.016,.019,.021],saturn:[.022,.021,.019],uranus:[.025,.048,.05],neptune:[.02,.04,.05]}[id]))},
-      uVisibility:{value:1},uRelief:{value:0},uSheen:{value:.012},uHover:{value:0},
+      uVisibility:{value:1},uRelief:{value:0},uSheen:{value:id==='forge'||id==='uranus'?0:.008},uHover:{value:0},
+      uCloudWorld:{value:id==='forge'||id==='uranus'},
       uHasRings:{value:id==='saturn'},uPolarRatio:{value:body.ratio}
     }),[id]);
     const ringUniforms=R.useMemo(()=>({
@@ -336,7 +350,7 @@ export function createVisualRefinement(api) {
         if(cancelled)return;
         const globe=result.meshes.find(m=>/_Globe|OpaqueCloudDeck/.test(m.name));
         if(globe?.material.map)material.uMap.value=globe.material.map;
-        if(globe?.material.normal){material.uNormalMap.value=globe.material.normal;material.uHasNormal.value=true;}
+        if(globe?.material.normal && (id==='mercury'||id==='recon')){material.uNormalMap.value=globe.material.normal;material.uHasNormal.value=true;}
         if(globe?.material.roughness){material.uRoughMap.value=globe.material.roughness;material.uHasRough.value=true;}
         const rings=result.meshes.find(m=>m.name.includes('_Ring_'));
         if(id==='saturn'&&rings?.material.map)material.uRingMap.value=rings.material.map;
@@ -353,8 +367,10 @@ export function createVisualRefinement(api) {
       response.current+=(target-response.current)*(data.motion==='reduced'?1:1-Math.exp(-Math.min(delta,.05)/.23));
       material.uVisibility.value=flight.agent===id?1:1-flight.amount;
       material.uHover.value=response.current; material.uSun.value.copy(sun);
-      if(data.motion==='full'&&presentation.kind!=='hidden'){
-        spin.current+=Math.min(delta,.05)*(id==='mercury'?.045:id==='forge'?.028:.065)*(1+response.current*2.4);
+      if((sceneClock.started||!document.getElementById('command-stage'))&&!captureInitial&&data.motion==='full'&&presentation.kind!=='hidden'){
+        // Positive spin around tilted poles naturally makes Venus and Uranus
+        // retrograde in the common reference frame. Do not reverse them twice.
+        spin.current+=Math.min(delta,.05)*body.spin;
         root.current.rotation.y=spin.current;
       }
       root.current.getWorldQuaternion(work.q);
@@ -367,7 +383,8 @@ export function createVisualRefinement(api) {
           uniforms:m.name.includes('_Ring_')?ringUniforms:material,vertexShader:vertex,
           fragmentShader:m.name.includes('_Ring_')?ringFragment:m.name.includes('Atmospheric')?atmosphereFragment:planetFragment,
           side:m.name.includes('_Ring_')?DoubleSide:undefined,
-          transparent:true,depthWrite:!/_Ring_|Atmospheric/.test(m.name),depthTest:true
+          transparent:true,
+          depthWrite:!/_Ring_|Atmospheric/.test(m.name),depthTest:true
         })},m.name)):
       j('mesh',{children:[j('sphereGeometry',{args:[.5,64,48]}),j('shaderMaterial',{uniforms:material,vertexShader:vertex,fragmentShader:planetFragment})]})
     })});
@@ -389,7 +406,7 @@ export function createVisualRefinement(api) {
       const hoverTarget = data.hoverAgent === id ? 1 : 0;
       response.current += (hoverTarget - response.current) * (data.motion === 'reduced' ? 1 : 1 - Math.exp(-Math.min(delta,.05) / (hoverTarget ? .18 : .38)));
       planet.current.scale.setScalar(bodies[id].scale * (1 + response.current * (1 - flight.amount) * (id === 'saturn' ? .045 : .065)));
-      positionAt(id, sceneClock.orbit * .028, planet.current.position);
+      positionAt(id, sceneClock.orbit * .007, planet.current.position);
       const focus = presentation.kind === 'focus' || presentation.kind === 'sequence' ? presentation.agent : data.focusAgent;
       planet.current.visible = (constellationVisible() && (flight.amount < 1 || flight.agent === id)) || presentation.kind === 'focus' && focus === id;
       if (halo.current) {
@@ -406,13 +423,15 @@ export function createVisualRefinement(api) {
   const pairs = [['mercury', 'recon'], ['recon', 'uranus'], ['uranus', 'neptune'], ['neptune', 'warden'], ['warden', 'saturn'], ['saturn', 'forge'], ['forge', 'mercury']];
   function OrbitalGuide() {
     const group = R.useRef();
-    const points = R.useMemo(() => Array.from({ length: 257 }, (_, i) => positionAt('mercury', i / 256 * Math.PI * 2)), []);
+    const paths = R.useMemo(() => Object.keys(bodies).map(id => ({id,
+      points:Array.from({ length:257 }, (_,i) => positionAt(id,i/256*Math.PI*2))})), []);
     useFrame(() => { if (group.current) {
       group.current.visible = constellationVisible() && flight.amount < 1;
       group.current.traverse(node => { if (node.material) { node.material.userData.baseOpacity ??= node.material.opacity; node.material.opacity = node.material.userData.baseOpacity * (1 - flight.amount); } });
     } });
     return j('group', { ref: group, children: [
-      j(Line, { points, lineWidth: 1, color: '#729c93', opacity: .28, transparent: true, depthWrite: false, toneMapped: false }),
+      ...paths.map(({id,points}) => j(Line,{points,lineWidth:.65,color:'#729c93',opacity:.075,
+        transparent:true,depthWrite:false,depthTest:true,toneMapped:false},id)),
       j('mesh', { position: center, children: [j('sphereGeometry', { args: [.045, 16, 12] }), j('meshBasicMaterial', { color: '#9de2c6', transparent: true, opacity: .7 })] }),
       j('mesh', { position: center, children: [j('ringGeometry', { args: [.14, .145, 80] }), j('meshBasicMaterial', { color: '#75b99d', transparent: true, side: DoubleSide, opacity: .45, depthWrite: false })] })
     ] });
@@ -435,7 +454,7 @@ export function createVisualRefinement(api) {
         : data.tourActive
         ? data.phase === 5 || choreography.from === fromId && choreography.to === toId
         : index === Math.min(6, Math.max(0, data.phase + 1));
-      if (line.current.material) line.current.material.opacity = (active ? .6 : .16) * (1 - flight.amount);
+      if (line.current.material) line.current.material.opacity = (active ? .32 : .065) * (1 - flight.amount);
       from.getWorldPosition(curve.a); to.getWorldPosition(curve.b);
       curve.direction.copy(curve.b).sub(curve.a).normalize();
       curve.a.addScaledVector(curve.direction, bodies[fromId].scale * .55);
@@ -549,7 +568,15 @@ export function createVisualRefinement(api) {
       const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:1800000});
       recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};recorder.start(1000);
       const scroll=y=>{if(window.__lenis)window.__lenis.scrollTo(y,{duration:.6});else window.scrollTo({top:y,behavior:'smooth'});};
-      const mark=label=>{events.push({label,at:performance.now(),viewport:{...diagnostics.viewport},motion:{...diagnostics.motion}});setText(label);};
+      const mark=label=>{
+        const stage=document.getElementById('command-stage').getBoundingClientRect();
+        const rail=document.querySelector('.hero-rail');
+        events.push({label,at:performance.now(),viewport:{...diagnostics.viewport},motion:{...diagnostics.motion},
+          scene:inspectScene(),stage:stage.toJSON(),panel:rail?.dataset.detailOpen==='true'?rail.getBoundingClientRect().toJSON():null,
+          pageOverflow:document.documentElement.scrollWidth>window.innerWidth+1,
+          motionButtons:Array.from(document.querySelectorAll('button,[role=switch]')).filter(b=>/pause scene|scene motion|pause motion/i.test(b.getAttribute('aria-label')||b.textContent)).length
+        });setText(label);
+      };
       const focus=document.getElementById('agent-focus');
       const focusTop=()=>window.scrollY+focus.getBoundingClientRect().top;
       try {
@@ -682,11 +709,19 @@ export function createVisualRefinement(api) {
       const moduleFocus = presentation.kind === 'focus';
       const exploring = presentation.kind === 'hero' && !!focus && !data.tourActive && interaction.exploredAgent === focus;
       const actualAspect = camera.aspect;
+      // A fixed perspective at each poster's reference aspect, with uniform
+      // zoom letterboxing, makes the image and the live initial pose agree at
+      // every container ratio. Camera distance is not independently refitted.
+      const referenceAspect = isMobile ? 380/350 : 687/565;
+      const zoom = exploring || moduleFocus ? 1 : Math.min(1, actualAspect/referenceAspect);
+      if(camera.zoom!==zoom){camera.zoom=zoom;camera.updateProjectionMatrix();}
       if (object) {
         object.getWorldPosition(world);
         if (moduleFocus) {
-          const distance = bodies[focus].scale * (focus === 'saturn' ? 4.7 : 2.65);
-          target.copy(world).add(new Vector3(0, distance * .08, distance));
+          const radius = bodies[focus].scale * (focus === 'saturn' ? 1.164 : focus === 'uranus' ? 1 : .504);
+          const fit = Math.tan(camera.fov*Math.PI/360) * Math.min(1, actualAspect) * .8;
+          const distance = radius / Math.sin(Math.atan(fit));
+          target.copy(world).add(new Vector3(0, 0, distance));
           goalLook.copy(world);
         } else if (exploring) {
           const bounds = root.current.getBoundingClientRect();
@@ -709,11 +744,11 @@ export function createVisualRefinement(api) {
           // Dolly and pan through the shared system, rather than replacing
           // the scene with isolated planets at each tour step.
           goalLook.copy(center).lerp(world, .18);
-          target.copy(goalLook).add(new Vector3(0, .55, isMobile ? 10.5 : 9.0));
+          target.copy(goalLook).add(new Vector3(0, 0, 6));
         }
       } else {
         goalLook.copy(center);
-        target.copy(center).add(new Vector3(0, .6, isMobile ? 11.5 : 10.5));
+        target.copy(center).add(new Vector3(0, 0, 6));
       }
       // Fit the entire constellation during orbit and phase travel, including
       // Saturn's rings. Panning must never crop a collaborating planet.
@@ -721,14 +756,29 @@ export function createVisualRefinement(api) {
         const tangent = Math.tan(camera.fov * Math.PI / 360);
         let distance = target.z - goalLook.z;
         for (const mesh of agentMeshes) {
-          const planetId = mesh.userData.agentId;
-          mesh.getWorldPosition(world);
-          const radius = bodies[planetId].scale * (planetId === 'saturn' ? 1.12 : .56);
-          const horizontal = (Math.abs(world.x-goalLook.x)+radius+.3)/(tangent*actualAspect);
-          const vertical = (Math.abs(world.y-goalLook.y)+radius+.45)/tangent;
-          distance = Math.max(distance, horizontal+world.z-goalLook.z, vertical+world.z-goalLook.z);
+          mesh.updateWorldMatrix(true, true);
+          mesh.traverse(node => {
+            if (!node.geometry || !node.material?.uniforms?.uVisibility) return;
+            if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+            const box = node.geometry.boundingBox;
+            world.copy(box.min).add(box.max).multiplyScalar(.5).applyMatrix4(node.matrixWorld);
+            const rx=(box.max.x-box.min.x)*.5, ry=(box.max.y-box.min.y)*.5, rz=(box.max.z-box.min.z)*.5;
+            const m=node.matrixWorld.elements;
+            // Ellipsoid/disc support against the four view-frustum planes.
+            // A rotating ring's square bounding box must not make the camera
+            // breathe once every axial turn. This is invariant for annuli.
+            for(const horizontal of [true,false]) for(const sign of [-1,1]) {
+              const slope=sign/(tangent*(horizontal?referenceAspect:1));
+              const u=(horizontal?m[0]:m[1])*slope+m[2];
+              const v=(horizontal?m[4]:m[5])*slope+m[6];
+              const w=(horizontal?m[8]:m[9])*slope+m[10];
+              const support=Math.sqrt((rx*u)**2+(ry*v)**2+(rz*w)**2);
+              const projected=(horizontal?world.x-goalLook.x:world.y-goalLook.y)*slope+world.z-goalLook.z;
+              distance=Math.max(distance,projected+support+.32*Math.abs(slope));
+            }
+          });
         }
-        target.copy(goalLook).add(new Vector3(0, .12, distance));
+        target.copy(goalLook).add(new Vector3(0, 0, distance));
       }
       const t = sceneClock.time;
       offset.copy(target).sub(goalLook)
@@ -779,9 +829,11 @@ export function createVisualRefinement(api) {
       }
       root.current.dataset.focusProgress = flight.amount.toFixed(4);
       root.current.dataset.exploredAgent = exploring ? focus : '';
-      sceneReader = () => ({
+      sceneReader = () => {
+        const measured=root.current.getBoundingClientRect();
+        return ({
         mode: presentation.kind, selected: exploring ? focus : null, isolation: flight.amount,
-        camera: camera.position.toArray(), aspect: camera.aspect, viewport: [size.width, size.height],
+        camera: camera.position.toArray(), aspect: camera.aspect, viewport: [measured.width, measured.height],
         clock: sceneClock.time, orbit: sceneClock.orbit,
         planets: agentMeshes.map(mesh => {
           mesh.updateWorldMatrix(true, true);
@@ -791,13 +843,13 @@ export function createVisualRefinement(api) {
             const positions = node.geometry.attributes.position;
             for (let i = 0; i < positions.count; i += 3) {
               const point = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(node.matrixWorld).project(camera);
-              points.push([(point.x + 1) * size.width / 2, (1 - point.y) * size.height / 2]);
+              points.push([(point.x + 1) * measured.width / 2, (1 - point.y) * measured.height / 2]);
             }
           });
           return { id: mesh.userData.agentId, visible: mesh.visible, scale: mesh.scale.toArray(),
             bounds: [Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1])), Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))] };
         })
-      });
+      }); };
       raycaster.setFromCamera(pointer, camera);
       const hits = inside.current ? raycaster.intersectObjects(agentMeshes.filter(mesh => mesh.visible), true) : [];
       let id = interaction.labelHover;
@@ -863,7 +915,16 @@ export function createVisualRefinement(api) {
   }
   function Reveal({ onReady }) {
     const frames = R.useRef(0);
-    useFrame(() => { if (++frames.current === 3) onReady(); });
+    const {gl}=useThree();
+    useFrame(() => {
+      const allMounted = Object.values(bodies).every(body => document.getElementById('command-stage')?.getAttribute('data-'+body.name+'-asset') === 'loaded');
+      if (allMounted && ++frames.current === 6) {
+        onReady();
+        if(captureInitial) requestAnimationFrame(()=>gl.domElement.toBlob(blob=>{
+          if(blob)fetch('/__qa__/frame',{method:'POST',headers:{'X-QA-Device':presentation.mobile?'mobile':'desktop','Content-Type':'image/png'},body:blob});
+        },'image/png'));
+      }
+    });
     return null;
   }
   function Stage() {
@@ -875,7 +936,12 @@ export function createVisualRefinement(api) {
     const root = R.useRef();
     const labels = R.useRef({});
     const cursor = R.useRef();
-    R.useEffect(() => { loadTextures().then(() => setReady(true)); }, []);
+    R.useEffect(() => { loadTextures().then(() => setReady(true)).catch(error => { console.error('Scene loading failed',error); setFailed(true); }); }, []);
+    R.useEffect(() => {
+      if(!visible)return;
+      const timer=setTimeout(()=>{sceneClock.started=true;},700);
+      return()=>clearTimeout(timer);
+    },[visible]);
     R.useEffect(() => {
       const update = () => setHidden(document.hidden);
       document.addEventListener('visibilitychange', update);
@@ -894,10 +960,14 @@ export function createVisualRefinement(api) {
       try { if (!(canvas.getContext('webgl2') || canvas.getContext('webgl'))) setFailed(true); } catch { setFailed(true); }
     }, []);
     const labelNames = { mercury: 'ROUTING', forge: 'REPAIR & PATCH', recon: 'RECONNAISSANCE', warden: 'CONTAINMENT', saturn: 'GOVERNANCE', uranus: 'ANOMALY DETECTION', neptune: 'THREAT FORENSICS' };
-    return j('div', { ref: root, id: 'command-stage', className: 'tricore-stage', 'data-scene-mode': layout.kind, 'data-active-agent': layout.agent || '', children: [
-      j('img', { className: 'tri-static-scene', src: assetPath('assets/scene-fallback.jpg'), alt: '', 'aria-hidden': true, style: { opacity: visible && !failed ? 0 : 1 } }),
+    return j('div', { ref: root, id: 'command-stage', className: 'tricore-stage', 'data-scene-mode': layout.kind, 'data-active-agent': layout.agent || '',
+      'data-models-ready':visible,'aria-busy':!visible&&!failed, style:{'--tri-ready':visible&&!failed?1:0},children: [
+      j('picture',{className:'tri-static-scene',style:{opacity:visible&&!failed?0:1},'aria-hidden':true,children:[
+        j('source',{media:'(max-width:768px)',srcSet:assetPath('assets/scene-initial-mobile.png')}),
+        j('img',{src:assetPath('assets/scene-initial-desktop.png'),alt:''})
+      ]}),
       layout.agent ? j('div', { className: `tri-focus-fallback ${layout.agent === 'saturn' ? 'tri-fallback-saturn' : ''}`, 'aria-hidden': true, style: { visibility: visible && !failed ? 'hidden' : 'visible' }, children: j('div', { className: 'tri-fallback-sphere', style: { backgroundImage: `radial-gradient(circle at 28% 24%,transparent 24%,rgba(0,0,0,.78) 92%),url("${assetPath('assets/planets/' + bodies[layout.agent].file)}")` } }) }) : null,
-      ready && !failed ? j(Canvas, { frameloop: hidden ? 'never' : 'always', dpr: [1, 1.5], camera: { fov: 38, near: .1, far: 45, position: [0, 2.2, 8.65] }, gl: { antialias: true, alpha: true, powerPreference: 'high-performance' }, style: { touchAction: 'pan-y' }, children: [
+      ready && !failed ? j(Canvas, { frameloop: hidden ? 'never' : 'always', dpr: [1, 1.5], camera: { fov: 38, near: .1, far: 45, position: [0, 2.2, 8.65] }, gl: { antialias: true, alpha: true, powerPreference: 'high-performance',preserveDrawingBuffer:captureInitial }, style: { touchAction: 'pan-y' }, children: [
         j(Presentation, { root, onChange: setLayout }), j(ViewportSync,{root}), j(ExploreFlight, {}), j(Universe, {}), j(SpaceDust, {}), j(Stars, {}), j(OrbitalGuide, {}), ...agents.map(agent => j(OrbitAgent, { id: agent.id, children: j(Planet, { id: agent.id }) }, agent.id)),
         j(Communications, {}), j(Camera, { labels, root, cursor }), qa.enabled?j(Calibration,{}):null, j(Reveal, { onReady: () => setVisible(true) })
       ] }) : null,
